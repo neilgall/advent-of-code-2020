@@ -27,7 +27,7 @@ part2 input = product $ listWhichAddTo2020 sums
 
 
 main = do
-  input <- fmap load (readFile "input.txt")
+  input <- fmap load (readFile "../input.txt")
   putStrLn $ show $ part1 input
   putStrLn $ show $ part2 input
 
