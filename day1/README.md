@@ -14,7 +14,7 @@ real	0m0.033s
 user	0m0.023s
 sys	0m0.010s
 ```
------
+
 ```
 [neil@bawbags rust-day1]$ cargo build --release
    Compiling rust-day1 v0.1.0 (/home/neil/Projects/adventofcode2020/day1/rust-day1)
@@ -27,17 +27,16 @@ real	0m0.006s
 user	0m0.006s
 sys	0m0.000s
 ```
------
+
 ```
 [neil@bawbags c]$ gcc -O3 -o day1 day1.c
 [neil@bawbags c]$ time ./day1 
 part1: 840324
 part2: 170098110
 
-real	0m0.008s
-user	0m0.008s
-sys	0m0.000s
+real	0m0.007s
+user	0m0.003s
+sys	0m0.003s
 ```
 
-<h1>Rust wins!</h1>
 
