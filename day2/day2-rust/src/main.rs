@@ -19,11 +19,6 @@ struct Password {
 
 // ---- model parser
 
-fn range(input: &str) -> ParseResult<Range<usize>> {
-    let p = map(seq(first(integer, string("-")), integer), |(start, end)| (start as usize)..(end as usize)+1);
-    p.parse(input)
-}
-
 fn password(input: &str) -> ParseResult<Password> {
     let pos1p = first(integer, string("-"));
     let pos2p = first(integer, whitespace);
