@@ -11,7 +11,8 @@ use parser::*;
 
 #[derive(Debug, Eq, PartialEq)]
 struct Password {
-	num_chars: Range<usize>,
+	position1: usize,
+	position2: usize,
 	character: char,
 	password: String
 }
@@ -24,11 +25,13 @@ fn range(input: &str) -> ParseResult<Range<usize>> {
 }
 
 fn password(input: &str) -> ParseResult<Password> {
-	let rp = first(range, whitespace);
-	let cp = first(letter, string(": "));
-	let pp = one_or_more(letter);
-	let parser = map(seq(seq(rp, cp), pp), |((r, c), p)| Password {
-		num_chars: r,
+	let pos1p = first(integer, string("-"));
+	let pos2p = first(integer, whitespace);
+	let charp = first(letter, string(": "));
+	let passp = one_or_more(letter);
+	let parser = map(seq(pos1p, seq(pos2p, seq(charp, passp))), |(n1, (n2, (c, p)))| Password {
+		position1: n1 as usize,
+		position2: n2 as usize,
 		character: c,
 		password: p.into_iter().collect()
 	});
@@ -53,20 +56,31 @@ fn parse_input(input: &str) -> ParseResult<Vec<Password>> {
 // --- problem
 
 impl Password {
-	fn is_valid(&self) -> bool {
+	fn part1_is_valid(&self) -> bool {
 		let n = self.password.chars().filter(|c| c == &self.character).count();
-		self.num_chars.contains(&n)
+		self.position1 <= n && n <= self.position2
+	}
+
+	fn part2_is_valid(&self) -> bool {
+		let c1 = self.password.chars().nth(self.position1 - 1) == Some(self.character);
+		let c2 = self.password.chars().nth(self.position2 - 1) == Some(self.character);
+		(c1 || c2) && !(c1 && c2)
 	}
 }
 
 fn part1(passwords: &Vec<Password>) -> usize {
-	passwords.iter().filter(|p| p.is_valid()).count()
+	passwords.iter().filter(|p| p.part1_is_valid()).count()
+}
+
+fn part2(passwords: &Vec<Password>) -> usize {
+	passwords.iter().filter(|p| p.part2_is_valid()).count()
 }
 
 fn main() {
 	let input = read_file("../input.txt").unwrap();
 	let (_, passwords) = parse_input(&input).unwrap();
 	println!("part1 {}", part1(&passwords));
+	println!("part2 {}", part2(&passwords));
 }
 
 #[cfg(test)]
@@ -79,28 +93,46 @@ mod tests {
 		assert_eq!(rest, "");
 		assert_eq!(passwords,
 			vec![
-				Password { num_chars: 1..4, character: 'a', password: String::from("abcde") },
-				Password { num_chars: 1..4, character: 'b', password: String::from("cdefg") },
-				Password { num_chars: 2..10, character: 'c', password: String::from("ccccccccc") }
+				Password { position1: 1, position2: 3, character: 'a', password: String::from("abcde") },
+				Password { position1: 1, position2: 3, character: 'b', password: String::from("cdefg") },
+				Password { position1: 2, position2: 9, character: 'c', password: String::from("ccccccccc") }
 			]
 		);
 	}
 
 	#[test]
-	fn test_is_valid_1() {
-		let p = Password { num_chars: 1..4, character: 'a', password: String::from("abcde") };
-		assert_eq!(p.is_valid(), true);
+	fn test_part1_is_valid_1() {
+		let p = Password { position1: 1, position2: 3, character: 'a', password: String::from("abcde") };
+		assert_eq!(p.part1_is_valid(), true);
 	}
 
 	#[test]
-	fn test_is_valid_2() {
-		let p = Password { num_chars: 1..4, character: 'b', password: String::from("cdefg") };
-		assert_eq!(p.is_valid(), false);
+	fn test_part1_is_valid_2() {
+		let p = Password { position1: 1, position2: 3, character: 'b', password: String::from("cdefg") };
+		assert_eq!(p.part1_is_valid(), false);
 	}
 
 	#[test]
-	fn test_is_valid_3() {
-		let p = Password { num_chars: 2..10, character: 'c', password: String::from("ccccccccc") };
-		assert_eq!(p.is_valid(), true);
+	fn test_part1_is_valid_3() {
+		let p = Password { position1: 2, position2: 9, character: 'c', password: String::from("ccccccccc") };
+		assert_eq!(p.part1_is_valid(), true);
+	}
+
+	#[test]
+	fn test_part2_is_valid_1() {
+		let p = Password { position1: 1, position2: 3, character: 'a', password: String::from("abcde") };
+		assert_eq!(p.part2_is_valid(), true);
+	}
+
+	#[test]
+	fn test_part2_is_valid_2() {
+		let p = Password { position1: 1, position2: 3, character: 'b', password: String::from("cdefg") };
+		assert_eq!(p.part2_is_valid(), false);
+	}
+
+	#[test]
+	fn test_part2_is_valid_3() {
+		let p = Password { position1: 2, position2: 9, character: 'c', password: String::from("ccccccccc") };
+		assert_eq!(p.part2_is_valid(), false);
 	}
 }
