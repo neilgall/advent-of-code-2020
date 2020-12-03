@@ -1,7 +1,6 @@
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::ops;
 
 // --- model
 
@@ -24,7 +23,7 @@ struct Offset {
     y: usize
 }
 
-impl ops::Add<Offset> for Pos {
+impl std::ops::Add<Offset> for Pos {
     type Output = Pos;
 
     fn add(self, offset: Offset) -> Self::Output {
