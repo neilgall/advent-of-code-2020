@@ -90,10 +90,26 @@ fn part1(model: &Model) -> usize {
     model.count_trees_on_slope(Pos { x: 0, y: 0 }, Offset { x: 3, y: 1 })
 }
 
+fn part2(model: &Model) -> usize {
+    let offsets = vec![
+        Offset { x: 1, y: 1 },
+        Offset { x: 3, y: 1 },
+        Offset { x: 5, y: 1 },
+        Offset { x: 7, y: 1 },
+        Offset { x: 1, y: 2 }
+    ];
+    let start = Pos { x: 0, y: 0 };
+
+    offsets.iter()
+        .map(|offset| model.count_trees_on_slope(start, *offset))
+        .product()
+}
+
 fn main() {
     let input = read_file("../input.txt").unwrap();
     let model = parse_input(&input);
     println!("part1 {}", part1(&model));
+    println!("part2 {}", part2(&model));
 }
 
 #[cfg(test)]
@@ -126,7 +142,10 @@ mod tests {
     #[test]
     fn test_count_trees_on_slope() {
         let model = parse_input(sample_input());
-        let trees = model.count_trees_on_slope(Pos { x: 0, y: 0 }, Offset { x: 3, y: 1 });
-        assert_eq!(trees, 7);
+        assert_eq!(model.count_trees_on_slope(Pos { x: 0, y: 0 }, Offset { x: 1, y: 1 }), 2);
+        assert_eq!(model.count_trees_on_slope(Pos { x: 0, y: 0 }, Offset { x: 3, y: 1 }), 7);
+        assert_eq!(model.count_trees_on_slope(Pos { x: 0, y: 0 }, Offset { x: 5, y: 1 }), 3);
+        assert_eq!(model.count_trees_on_slope(Pos { x: 0, y: 0 }, Offset { x: 7, y: 1 }), 4);
+        assert_eq!(model.count_trees_on_slope(Pos { x: 0, y: 0 }, Offset { x: 1, y: 2 }), 2);
     }
 }
