@@ -1,6 +1,17 @@
 use std::fs::File;
 use std::io::prelude::*;
 
+// --- file read
+
+fn read_file(filename: &str) -> std::io::Result<String> {
+    let mut file = File::open(filename)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    Ok(contents)
+}
+
+// --- model
+
 #[derive(Debug, Eq, PartialEq)]
 struct BoardingPass {
     row: usize,
@@ -13,22 +24,19 @@ impl BoardingPass {
     }
 }
 
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
 fn decode(s: &str, one: char) -> usize {
     s.chars().fold(0, |r, c| (r << 1) | (if c == one { 1 } else { 0 }))
 }
 
-fn to_boarding_pass(s: &str) -> BoardingPass {
-    let row = decode(&s[0..7], 'B');
-    let column = decode(&s[7..10], 'R');
-    BoardingPass { row, column }
+impl From<&str> for BoardingPass {
+    fn from(s: &str) -> BoardingPass {
+        let row = decode(&s[0..7], 'B');
+        let column = decode(&s[7..10], 'R');
+        BoardingPass { row, column }
+    }
 }
+
+// --- problems
 
 fn part1(passes: &Vec<BoardingPass>) -> Option<usize> {
     passes.iter().map(|bp| bp.seat_id()).max()
@@ -38,16 +46,16 @@ fn part2(passes: &Vec<BoardingPass>) -> Option<usize> {
     let seat_ids: Vec<usize> = passes.iter().map(|bp| bp.seat_id()).collect();
 
     seat_ids.iter().max().and_then(|max_id| {
-        (0..=*max_id).find(|id_ref| {
+        (1..=*max_id).find(|id_ref| {
             let id = *id_ref;
-            !seat_ids.contains(&id) && id > 0 && seat_ids.contains(&(id-1)) && seat_ids.contains(&(id+1))
+            !seat_ids.contains(&id) && seat_ids.contains(&(id-1)) && seat_ids.contains(&(id+1))
         })
     })
 }
 
 fn main() {
     let input = read_file("./input.txt").unwrap();
-    let passes: Vec<BoardingPass> = input.lines().map(to_boarding_pass).collect();
+    let passes: Vec<BoardingPass> = input.lines().map(|line| line.into()).collect();
 
     println!("part1 {}", part1(&passes).unwrap());
     println!("part2 {}", part2(&passes).unwrap());
@@ -67,8 +75,8 @@ mod tests {
 
     #[test]
     fn test_to_baording_pass() {
-        assert_eq!(to_boarding_pass("BFFFBBFRRR"), BoardingPass { row: 70, column: 7 });
-        assert_eq!(to_boarding_pass("FFFBBBFRRR"), BoardingPass { row: 14, column: 7 });
-        assert_eq!(to_boarding_pass("BBFFBBFRLL"), BoardingPass { row: 102, column: 4 });
+        assert_eq!(BoardingPass::from("BFFFBBFRRR"), BoardingPass { row: 70, column: 7 });
+        assert_eq!(BoardingPass::from("FFFBBBFRRR"), BoardingPass { row: 14, column: 7 });
+        assert_eq!(BoardingPass::from("BBFFBBFRLL"), BoardingPass { row: 102, column: 4 });
     }
 }
