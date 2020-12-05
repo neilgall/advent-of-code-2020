@@ -34,11 +34,22 @@ fn part1(passes: &Vec<BoardingPass>) -> Option<usize> {
     passes.iter().map(|bp| bp.seat_id()).max()
 }
 
+fn part2(passes: &Vec<BoardingPass>) -> Option<usize> {
+    let seat_ids: Vec<usize> = passes.iter().map(|bp| bp.seat_id()).collect();
+
+    seat_ids.iter().max().and_then(|max_id| {
+        (0..=*max_id).find(|id| {
+            !seat_ids.contains(id) && *id > 0 && seat_ids.contains(&((*id)-1)) && seat_ids.contains(&((*id)+1))
+        })
+    })
+}
+
 fn main() {
     let input = read_file("./input.txt").unwrap();
     let passes: Vec<BoardingPass> = input.lines().map(to_boarding_pass).collect();
 
     println!("part1 {}", part1(&passes).unwrap());
+    println!("part2 {}", part2(&passes).unwrap());
 }
 
 #[cfg(test)]
