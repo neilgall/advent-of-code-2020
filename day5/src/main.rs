@@ -38,8 +38,9 @@ fn part2(passes: &Vec<BoardingPass>) -> Option<usize> {
     let seat_ids: Vec<usize> = passes.iter().map(|bp| bp.seat_id()).collect();
 
     seat_ids.iter().max().and_then(|max_id| {
-        (0..=*max_id).find(|id| {
-            !seat_ids.contains(id) && *id > 0 && seat_ids.contains(&((*id)-1)) && seat_ids.contains(&((*id)+1))
+        (0..=*max_id).find(|id_ref| {
+            let id = *id_ref;
+            !seat_ids.contains(&id) && id > 0 && seat_ids.contains(&(id-1)) && seat_ids.contains(&(id+1))
         })
     })
 }
