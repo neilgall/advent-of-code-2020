@@ -30,23 +30,24 @@ impl From<&str> for Group {
 
 impl Group {
     fn anyone_yesses(&self) -> usize {
-        let all: HashSet<&char> = self.people.iter().flat_map(|p| p.iter()).collect();
-        all.len()
+        self.people.iter()
+            .flat_map(|p| p.iter())
+            .collect::<HashSet<&char>>()
+            .len()
     }
 
     fn everyone_yesses(&self) -> usize {
-        let intersection: HashSet<char> = self.people.iter().fold(
-            ('a'..='z').collect(),
-            |r, p| r.intersection(p).cloned().collect()
-        );
-        intersection.len()
+        self.people.iter()
+            .fold(
+                ('a'..='z').collect::<HashSet<char>>(),
+                |r, p| r.intersection(p).cloned().collect()
+            )
+            .len()
 
     }
 }
 
-
 // --- problems 
-
 
 fn part1(groups: &Vec<Group>) -> usize {
     groups.iter().map(|g| g.anyone_yesses()).sum()
