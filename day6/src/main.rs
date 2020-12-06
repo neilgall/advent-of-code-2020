@@ -13,7 +13,7 @@ fn read_file(filename: &str) -> std::io::Result<String> {
 
 // --- model
 
-type Person = Vec<char>;
+type Person = HashSet<char>;
 
 struct Group {
     people: Vec<Person>
@@ -21,16 +21,26 @@ struct Group {
 
 impl From<&str> for Group {
     fn from(s: &str) -> Self {
-        Group {
-            people: s.lines().map(|line| line.chars().collect()).collect()
-        }
+        let people = s.lines()
+                        .map(|line| line.chars().collect())
+                        .collect();
+        Group { people }
     }
 }
 
 impl Group {
-    fn yesses(&self) -> usize {
+    fn anyone_yesses(&self) -> usize {
         let all: HashSet<&char> = self.people.iter().flat_map(|p| p.iter()).collect();
         all.len()
+    }
+
+    fn everyone_yesses(&self) -> usize {
+        let intersection: HashSet<char> = self.people.iter().fold(
+            ('a'..='z').collect(),
+            |r, p| r.intersection(p).cloned().collect()
+        );
+        intersection.len()
+
     }
 }
 
@@ -39,11 +49,11 @@ impl Group {
 
 
 fn part1(groups: &Vec<Group>) -> usize {
-    groups.iter().map(|g| g.yesses()).sum()
+    groups.iter().map(|g| g.anyone_yesses()).sum()
 }
 
 fn part2(groups: &Vec<Group>) -> usize {
-    0
+    groups.iter().map(|g| g.everyone_yesses()).sum()
 }
 
 fn main() {
@@ -59,11 +69,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_group() {
-        assert_eq!(Group::from("abc").yesses(), 3);
-        assert_eq!(Group::from("a\nb\nc").yesses(), 3);
-        assert_eq!(Group::from("ab\nac").yesses(), 3);
-        assert_eq!(Group::from("a\na\na\na").yesses(), 1);
-        assert_eq!(Group::from("b").yesses(), 1);
+    fn test_anyone_yesses() {
+        assert_eq!(Group::from("abc").anyone_yesses(), 3);
+        assert_eq!(Group::from("a\nb\nc").anyone_yesses(), 3);
+        assert_eq!(Group::from("ab\nac").anyone_yesses(), 3);
+        assert_eq!(Group::from("a\na\na\na").anyone_yesses(), 1);
+        assert_eq!(Group::from("b").anyone_yesses(), 1);
+    }
+
+    #[test]
+    fn test_everyone_yesses() {
+        assert_eq!(Group::from("abc").everyone_yesses(), 3);
+        assert_eq!(Group::from("abc\nabcd").everyone_yesses(), 3);
+        assert_eq!(Group::from("a\nb\nc").everyone_yesses(), 0);
+        assert_eq!(Group::from("ab\nac").everyone_yesses(), 1);
+        assert_eq!(Group::from("a\na\na\na").everyone_yesses(), 1);
+        assert_eq!(Group::from("b").everyone_yesses(), 1);
     }
 }
