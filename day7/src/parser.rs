@@ -139,11 +139,14 @@ pub fn one_or_more<'a, P, A>(p: P) -> impl Parser<'a, Vec<A>>
     move |mut input| {
         let mut result = Vec::new();
 
-        if let Ok((next_input, first_item)) = p.parse(input) {
-            input = next_input;
-            result.push(first_item);
-        } else {
-            return Err(("one or more", input));
+        match p.parse(input) {
+            Ok((next_input, first_item)) => {
+                input = next_input;
+                result.push(first_item);
+            }
+            Err((parser, input)) => {
+                return Err((parser, input));
+            }
         }
 
         while let Ok((next_input, next_item)) = p.parse(input) {
