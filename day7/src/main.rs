@@ -103,6 +103,14 @@ impl RuleSet {
                 .unwrap_or(false)
     }
 
+    fn number_of_contained_bags(&self, from: &BagColor) -> usize {
+        self.rules.get(from)
+            .map(|contents| contents.iter()
+                .map(|c| c.count * (1 + self.number_of_contained_bags(&c.color)))
+                .sum())
+            .unwrap_or(0)
+    }
+
     // --- problems 
 
     fn part1(&self) -> usize {
@@ -112,7 +120,7 @@ impl RuleSet {
     }
 
     fn part2(&self) -> usize {
-        0
+        self.number_of_contained_bags(&BagColor::of("shiny", "gold"))
     }
 }
 
