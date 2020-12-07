@@ -16,68 +16,6 @@ fn read_file(filename: &str) -> std::io::Result<String> {
 
 // --- model
 
-// #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-// enum Adjective {
-//     Bright,
-//     Clear,
-//     Dark,
-//     Dim,
-//     Dotted,
-//     Drab,
-//     Dull,
-//     Faded,
-//     Light,
-//     Mirrored,
-//     Muted,
-//     Pale,
-//     Plaid,
-//     Plain,
-//     Posh,
-//     Shiny,
-//     Striped,
-//     Vibrant,
-//     Wavy
-// }
-
-// #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-// enum Color {
-//     Aqua,
-//     Beige,
-//     Black,
-//     Blue,
-//     Bronze,
-//     Brown,
-//     Chartreuse,
-//     Coral,
-//     Crimson,
-//     Cyan,
-//     Fuchsia,
-//     Gold,
-//     Gray,
-//     Green,
-//     Indigo,
-//     Lavender,
-//     Magenta,
-//     Maroon,
-//     Olive,
-//     Orange,
-//     Plum,
-//     Purple,
-//     Red,
-//     Salmon,
-//     Silver,
-//     Tan,
-//     Teal,
-//     Tomato,
-//     Turquoise,
-//     Violet,
-//     White,
-//     Yellow,
-// }
-
-type Adjective = String;
-type Color = String;
-
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 struct BagColor(String, String);
 
@@ -106,61 +44,6 @@ struct RuleSet {
 
 fn parse_rule<'a>() -> impl Parser<'a, ContainsRule> {
     fn bag_color<'b>() -> impl Parser<'b, BagColor> {
-        // let adjective =
-        //     string("bright").means(Adjective::Bright)
-        //     .or(string("clear").means(Adjective::Clear))
-        //     .or(string("dark").means(Adjective::Dark))
-        //     .or(string("dim").means(Adjective::Dim))
-        //     .or(string("dotted").means(Adjective::Dotted))
-        //     .or(string("drab").means(Adjective::Drab))
-        //     .or(string("dull").means(Adjective::Dull))
-        //     .or(string("faded").means(Adjective::Faded))
-        //     .or(string("light").means(Adjective::Light))
-        //     .or(string("mirrored").means(Adjective::Mirrored))
-        //     .or(string("muted").means(Adjective::Muted))
-        //     .or(string("pale").means(Adjective::Pale))
-        //     .or(string("plaid").means(Adjective::Plaid))
-        //     .or(string("plain").means(Adjective::Plain))
-        //     .or(string("posh").means(Adjective::Posh))
-        //     .or(string("shiny").means(Adjective::Shiny))
-        //     .or(string("striped").means(Adjective::Striped))
-        //     .or(string("vibrant").means(Adjective::Vibrant))
-        //     .or(string("wavy").means(Adjective::Wavy));
-
-        // let color =
-        //     string("aqua").means(Color::Aqua)
-        //     .or(string("beige").means(Color::Beige))
-        //     .or(string("black").means(Color::Black))
-        //     .or(string("blue").means(Color::Blue))
-        //     .or(string("bronze").means(Color::Bronze))
-        //     .or(string("brown").means(Color::Brown))
-        //     .or(string("chartreuse").means(Color::Chartreuse))
-        //     .or(string("coral").means(Color::Coral))
-        //     .or(string("crimson").means(Color::Crimson))
-        //     .or(string("cyan").means(Color::Cyan))
-        //     .or(string("fuchsia").means(Color::Fuchsia))
-        //     .or(string("gold").means(Color::Gold))
-        //     .or(string("gray").means(Color::Gray))
-        //     .or(string("green").means(Color::Green))
-        //     .or(string("indigo").means(Color::Indigo))
-        //     .or(string("lavender").means(Color::Lavender))
-        //     .or(string("magenta").means(Color::Magenta))
-        //     .or(string("maroon").means(Color::Maroon))
-        //     .or(string("olive").means(Color::Olive))
-        //     .or(string("orange").means(Color::Orange))
-        //     .or(string("plum").means(Color::Plum))
-        //     .or(string("purple").means(Color::Purple))
-        //     .or(string("red").means(Color::Red))
-        //     .or(string("salmon").means(Color::Salmon))
-        //     .or(string("silver").means(Color::Silver))
-        //     .or(string("tan").means(Color::Tan))
-        //     .or(string("teal").means(Color::Teal))
-        //     .or(string("tomato").means(Color::Tomato))
-        //     .or(string("turquoise").means(Color::Turquoise))
-        //     .or(string("violet").means(Color::Violet))
-        //     .or(string("white").means(Color::White))
-        //     .or(string("yellow").means(Color::Yellow));
-
         let adjective = one_or_more(letter).map(|ls| ls.into_iter().collect());
         let color = one_or_more(letter).map(|ls| ls.into_iter().collect());
 
@@ -194,18 +77,15 @@ fn parse_rule<'a>() -> impl Parser<'a, ContainsRule> {
     contents_rule.or(no_contents_rule)
 }
 
-fn parse_input(input: &str) -> RuleSet {
-    let rules: Vec<ContainsRule> = input.lines().map(|line| parse_rule().parse(line).unwrap().1).collect();
-    RuleSet { 
-        rules: rules.into_iter().map(|r| (r.container, r.contents)).collect()
-    }
+fn parse_input(input: &str) -> ParseResult<RuleSet> {
+    let rule_set = one_or_more(first(parse_rule(), whitespace));
 
-    // let rule_set = one_or_more(first(parse_rule(), pair(whitespace, string("\n"))));
-
-    // rule_set.parse(input).map(|(rest, rules)| {
-    //     let rule_set = RuleSet { rules: rules.into_iter().flat_map(|rs| rs.into_iter()).collect() };
-    //     (rest, rule_set)
-    // })
+    rule_set.parse(input).map(|(rest, rules)| {
+        let rule_set = RuleSet { 
+            rules: rules.into_iter().map(|r| (r.container, r.contents)).collect()
+        };
+        (rest, rule_set)
+    })
 }
 
 impl RuleSet {
@@ -238,7 +118,7 @@ impl RuleSet {
 
 fn main() {
     let input = read_file("./input.txt").unwrap();
-    let rules: RuleSet = parse_input(&input);
+    let rules: RuleSet = parse_input(&input).unwrap().1;
 
     println!("part1 {}", rules.part1());
     println!("part2 {}", rules.part2());
@@ -301,5 +181,11 @@ mod tests {
                 contents: vec![]
             }))
         );
+    }
+
+    #[test]
+    fn test_parse_records_separated_by_lines() {
+        let p = one_or_more(first(letter, whitespace));
+        assert_eq!(p.parse("a\nb\nc\n"), Ok(("", vec!['a', 'b', 'c'])));
     }
 }
