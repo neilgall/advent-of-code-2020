@@ -45,14 +45,15 @@ impl Machine {
         }
     }
 
-    fn run(&mut self, program: &Program) -> Termination{
+    fn run(&mut self, program: &Program) -> Termination {
         let mut visited = HashSet::new();
 
-        while self.instr_ptr < program.len() {
-            if visited.contains(&self.instr_ptr) {
-                return Termination::InfiniteLoop;
-            } else {
-                visited.insert(self.instr_ptr);
+        loop {
+            if self.instr_ptr >= program.len() {
+                return Termination::EndOfProgram;
+            }
+            if !visited.insert(self.instr_ptr) {
+                return Termination::InfiniteLoop
             }
 
             match program[self.instr_ptr] {
@@ -68,8 +69,6 @@ impl Machine {
                 }
             }
         }
-
-        Termination::EndOfProgram
     }
 }
 
