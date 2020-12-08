@@ -1,8 +1,18 @@
+use std::rc::Rc;
+
 
 pub type ParseResult<'a, Output> = Result<(&'a str, Output), &'a str>;
 
 pub trait Parser<'a, Output> {
     fn parse(&self, input: &'a str) -> ParseResult<'a, Output>;
+
+    fn boxed(self) -> BoxedParser<'a, Output>
+    where
+        Self: Sized + 'a,
+        Output: 'a
+    {
+        BoxedParser::new(self)
+    }
 
     fn map<F, NewOutput>(self, map_fn: F) -> BoxedParser<'a, NewOutput>
     where
@@ -67,7 +77,8 @@ pub trait Parser<'a, Output> {
 
 }
 
-pub struct BoxedParser<'a, Output>(Box<dyn Parser<'a, Output> + 'a>);
+#[derive(Clone)]
+pub struct BoxedParser<'a, Output>(Rc<dyn Parser<'a, Output> + 'a>);
 
 impl<'a, F, Output> Parser<'a, Output> for F
 where
@@ -83,13 +94,17 @@ impl<'a, Output> BoxedParser<'a, Output> {
     where
         P: Parser<'a, Output> + 'a
     {
-        BoxedParser(Box::new(parser))
+        BoxedParser(Rc::new(parser))
     }
 }
 
 impl<'a, Output> Parser<'a, Output> for BoxedParser<'a, Output> {
     fn parse(&self, input: &'a str) -> ParseResult<'a, Output> {
         self.0.parse(input)
+    }
+
+    fn boxed(self) -> BoxedParser<'a, Output> {
+        self
     }
 }
 

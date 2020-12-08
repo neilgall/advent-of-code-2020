@@ -75,17 +75,15 @@ impl Machine {
 // --- parser
 
 fn parse_input(input: &str) -> ParseResult<Program> {
-    fn signed_integer<'a>() -> impl Parser<'a, i64> {
-        let sign = either(
-            any_char.pred(|c| *c == '+').means(1),
-            any_char.pred(|c| *c == '-').means(-1)
-        );
-        pair(sign, integer).map(|(s, i)| s * i)
-    }
+    let sign = either(
+        any_char.pred(|c| *c == '+').means(1),
+        any_char.pred(|c| *c == '-').means(-1)
+    );
+    let signed_integer = pair(sign, integer).map(|(s, i)| s * i);
 
-    let acc = right(match_literal("acc "), signed_integer()).map(Instruction::Acc);
-    let jmp = right(match_literal("jmp "), signed_integer()).map(Instruction::Jmp);
-    let nop = right(match_literal("nop "), signed_integer()).map(Instruction::Nop);
+    let acc = right(match_literal("acc "), signed_integer.clone()).map(Instruction::Acc);
+    let jmp = right(match_literal("jmp "), signed_integer.clone()).map(Instruction::Jmp);
+    let nop = right(match_literal("nop "), signed_integer).map(Instruction::Nop);
     let instruction = whitespace_wrap(either(either(acc, jmp), nop));
 
     zero_or_more(instruction).parse(input)
