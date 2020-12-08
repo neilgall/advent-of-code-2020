@@ -79,12 +79,12 @@ fn parse_input(input: &str) -> ParseResult<Program> {
         any_char.pred(|c| *c == '+').means(1),
         any_char.pred(|c| *c == '-').means(-1)
     );
-    let signed_integer = pair(sign, integer).map(|(s, i)| s * i);
+    let signed_integer = pair(sign, integer, |s, i| s * i).boxed();
 
     let acc = right(match_literal("acc "), signed_integer.clone()).map(Instruction::Acc);
     let jmp = right(match_literal("jmp "), signed_integer.clone()).map(Instruction::Jmp);
     let nop = right(match_literal("nop "), signed_integer).map(Instruction::Nop);
-    let instruction = whitespace_wrap(either(either(acc, jmp), nop));
+    let instruction = whitespace_wrap(one_of3(acc, jmp, nop));
 
     zero_or_more(instruction).parse(input)
 }

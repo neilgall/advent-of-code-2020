@@ -139,15 +139,16 @@ pub fn identifier(input: &str) -> ParseResult<String> {
     Ok((&input[next_index..], matched))
 }
 
-pub fn pair<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, (R1, R2)>
+pub fn pair<'a, P1, P2, R1, R2, F, R>(parser1: P1, parser2: P2, f: F) -> impl Parser<'a, R>
 where
     P1: Parser<'a, R1>,
-    P2: Parser<'a, R2>
+    P2: Parser<'a, R2>,
+    F: Fn(R1, R2) -> R
 {
     move |input| {
         parser1.parse(input).and_then(|(next_input, result1)| {
             parser2.parse(next_input)
-                .map(|(last_input, result2)| (last_input, (result1, result2)))
+                .map(|(last_input, result2)| (last_input, f(result1, result2)))
         })
     }
 }
@@ -157,7 +158,7 @@ where
     P1: Parser<'a, R1>,
     P2: Parser<'a, R2>
 {
-    map(pair(parser1, parser2), |(left, _)| left)
+    pair(parser1, parser2, |left, _| left)
 }
 
 pub fn right<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R2>
@@ -165,7 +166,7 @@ where
     P1: Parser<'a, R1>,
     P2: Parser<'a, R2>
 {
-    map(pair(parser1, parser2), |(_, right)| right)
+    pair(parser1, parser2, |_, right| right)
 }
 
 fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
@@ -307,6 +308,25 @@ where
             ok@Ok(_) => ok,
             Err(_) => parser2.parse(input)
         }
+}
+
+pub fn one_of3<'a, P1, P2, P3, A>(p1: P1, p2: P2, p3: P3) -> impl Parser<'a, A>
+where
+    P1: Parser<'a, A>,
+    P2: Parser<'a, A>,
+    P3: Parser<'a, A>
+{
+    either(either(p1, p2), p3)
+}
+
+pub fn one_of4<'a, P1, P2, P3, P4, A>(p1: P1, p2: P2, p3: P3, p4: P4) -> impl Parser<'a, A>
+where
+    P1: Parser<'a, A>,
+    P2: Parser<'a, A>,
+    P3: Parser<'a, A>,
+    P4: Parser<'a, A>
+{
+    either(either(p1, p2), either(p3, p4))
 }
 
 pub fn and_then<'a, P, F, A, B, NextP>(parser: P, f: F) -> impl Parser<'a, B>
