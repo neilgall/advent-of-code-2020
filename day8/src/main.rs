@@ -134,6 +134,20 @@ fn main() {
 mod tests {
     use super::*;
 
+    fn test_program() -> Program {
+        vec![
+            Instruction::Nop(0),
+            Instruction::Acc(1),
+            Instruction::Jmp(4),
+            Instruction::Acc(3),
+            Instruction::Jmp(-3),
+            Instruction::Acc(-99),
+            Instruction::Acc(1),
+            Instruction::Jmp(-4),
+            Instruction::Acc(6)
+        ]
+    }
+
     #[test]
     fn test_parse_instructions() {
         let sample = "
@@ -149,34 +163,13 @@ mod tests {
         ";
         let instructions = parse_input(sample);
 
-        assert_eq!(instructions, Ok(("", vec![
-            Instruction::Nop(0),
-            Instruction::Acc(1),
-            Instruction::Jmp(4),
-            Instruction::Acc(3),
-            Instruction::Jmp(-3),
-            Instruction::Acc(-99),
-            Instruction::Acc(1),
-            Instruction::Jmp(-4),
-            Instruction::Acc(6)
-        ])));
+        assert_eq!(instructions, Ok(("", test_program())));
     }
 
     #[test]
     fn test_running_until_instruction_visited_twice() {
-        let program = vec![
-            Instruction::Nop(0),
-            Instruction::Acc(1),
-            Instruction::Jmp(4),
-            Instruction::Acc(3),
-            Instruction::Jmp(-3),
-            Instruction::Acc(-99),
-            Instruction::Acc(1),
-            Instruction::Jmp(-4),
-            Instruction::Acc(6)
-        ];
         let mut machine = Machine::new();
-        let term = machine.run(&program);
+        let term = machine.run(&test_program());
 
         assert_eq!(term, Termination::InfiniteLoop);
         assert_eq!(machine.accumulator, 5);
@@ -184,18 +177,7 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        let program = vec![
-            Instruction::Nop(0),
-            Instruction::Acc(1),
-            Instruction::Jmp(4),
-            Instruction::Acc(3),
-            Instruction::Jmp(-3),
-            Instruction::Acc(-99),
-            Instruction::Acc(1),
-            Instruction::Jmp(-4),
-            Instruction::Acc(6)
-        ];
-        assert_eq!(part2(&program), Some(8));        
+        assert_eq!(part2(&test_program()), Some(8));        
     }
 
 }
