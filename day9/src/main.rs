@@ -25,8 +25,7 @@ fn sum_of_two_is(sum: i64, vec: &[i64]) -> bool {
 }
 
 fn find_first_invalid(vec: &Vec<i64>, preamble: usize) -> Option<i64> {
-    let end = vec.len() - preamble;
-    let index = (preamble..end).find(
+    let index = (preamble..vec.len()).find(
         |index| !sum_of_two_is(vec[*index], &vec[index-preamble..*index])
     );
 
@@ -103,6 +102,12 @@ mod tests {
     #[test]
     fn test_find_first_invalid() {
         let input = vec![35,20,15,25,47,40,62,55,65,95,102,117,150,182,127,219,299,277,309,576];
+        assert_eq!(find_first_invalid(&input, 5), Some(127));
+    }
+
+    #[test]
+    fn test_find_first_invalid_when_close_to_end() {
+        let input = vec![35,20,15,25,47,40,62,55,65,95,102,117,150,182,127,219];
         assert_eq!(find_first_invalid(&input, 5), Some(127));
     }
 
