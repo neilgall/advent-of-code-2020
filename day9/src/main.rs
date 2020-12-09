@@ -36,17 +36,18 @@ fn find_first_invalid(vec: &Vec<i64>, preamble: usize) -> Option<i64> {
 fn find_contiguous_set_summing_to(target: i64, vec: &[i64]) -> Option<&[i64]> {
     let mut start = 0;
     let mut end = 1;
-    let len = vec.len();
+    let mut sum: i64 = vec[start..=end].iter().sum();
 
-    while end < len {
-        let sum: i64 = vec[start..=end].iter().sum();
+    while end < vec.len() {
         if sum == target {
             return Some(&vec[start..=end]);
         }
         if sum > target {
+            sum -= vec[start];
             start += 1;
         } else {
             end += 1;
+            sum += vec[end];
         }
     }
 
