@@ -18,7 +18,27 @@ fn parse_input(input: &str) -> Vec<i64> {
 
 // --- problems
 
-fn adapter_order(adapters: &Vec<i64>) -> Vec<i64> {
+fn differences(xs: &[i64]) -> Vec<i64> {
+    let mut diffs = vec![];
+    let mut ixs = xs.iter();
+    let mut prev = ixs.next().unwrap();
+    while let Some(next) = ixs.next() {
+        diffs.push(next - prev);
+        prev = next;
+    }
+    diffs
+}
+
+fn distribution(xs: &[i64]) -> HashMap<i64, usize> {
+    let mut dist = HashMap::new();
+    for next in xs.iter() {
+        let count = dist.get(next).unwrap_or(&0) + 1;
+        dist.insert(*next, count);
+    }
+    dist
+}
+
+fn adapter_order(adapters: &[i64]) -> Vec<i64> {
     let mut ordered = adapters.to_vec();
     ordered.push(0);
     ordered.push(*adapters.iter().max().unwrap() + 3);
@@ -26,27 +46,32 @@ fn adapter_order(adapters: &Vec<i64>) -> Vec<i64> {
     ordered
 }
 
-fn distribution_of_diffs(sequence: &[i64]) -> HashMap<i64, usize> {
-    let mut dist = HashMap::new();
-    let mut prev = 0;
-    for curr in sequence.iter() {
-        let diff = curr - prev;
-        prev = *curr;
-        let count = dist.get(&diff).unwrap_or(&0) + 1;
-        dist.insert(diff, count);
-    }
-    dist
+fn adapter_permutations(adapters: &[i64]) -> usize {
+    differences(&adapter_order(adapters)).iter().fold((1, 0), 
+        |(permutations, ones), diff|
+            if *diff == 1 {
+                (permutations, ones+1)
+            } else { 
+                match ones {
+                    0 => (permutations, 0),
+                    1 => (permutations, 0),
+                    2 => (permutations * 2, 0),
+                    3 => (permutations * 4, 0),
+                    _ => (permutations * ((1 << (ones-1)) - 1), 0)
+                }
+            }
+        ).0
 }
 
 fn part1(adapters: &Vec<i64>) -> Option<usize> {
-    let dist = distribution_of_diffs(&adapter_order(adapters));
+    let dist = distribution(&differences(&adapter_order(adapters)));
     dist.get(&1).and_then(|ones|
         dist.get(&3).map(|threes| ones * threes)
     )
 }
 
-fn part2(adapters: &Vec<i64>) -> Option<i64> {
-    None
+fn part2(adapters: &Vec<i64>) -> usize {
+    adapter_permutations(adapters)
 }   
 
 
@@ -76,9 +101,15 @@ mod tests {
     }
 
     #[test]
+    fn test_differences() {
+        let sequence = vec![0,1,4,5,6,7,10,11,12,15,16,19,22];
+        assert_eq!(differences(&sequence), vec![1,3,1,1,1,3,1,1,3,1,3,3]);
+    }
+
+    #[test]
     fn test_distribution_of_diffs() {
-        let sequence = vec![1,4,5,6,7,10,11,12,15,16,19,22];
-        let distribution = distribution_of_diffs(&sequence);
+        let sequence = vec![0,1,4,5,6,7,10,11,12,15,16,19,22];
+        let distribution = distribution(&differences(&sequence));
         assert_eq!(distribution.len(), 2);
         assert_eq!(distribution.get(&1), Some(&7));
         assert_eq!(distribution.get(&3), Some(&5));
@@ -91,8 +122,20 @@ mod tests {
     }
 
     #[test]
-    fn test_part2_example_2() {
+    fn test_part1_example_2() {
         let adapters = vec![28,33,18,42,31,14,46,20,48,47,24,23,49,45,19,38,39,11,1,32,25,35,8,17,7,9,4,2,34,10,3];
         assert_eq!(part1(&adapters), Some(220));
+    }
+
+    #[test]
+    fn test_adapter_permutations_example_1() {
+        let adapters = vec![16,10,15,5,1,11,7,19,6,12,4];
+        assert_eq!(adapter_permutations(&adapters), 8);        
+    }
+
+    #[test]
+    fn test_adapter_permutations_example_2() {
+        let adapters = vec![28,33,18,42,31,14,46,20,48,47,24,23,49,45,19,38,39,11,1,32,25,35,8,17,7,9,4,2,34,10,3];
+        assert_eq!(adapter_permutations(&adapters), 19208);        
     }
 }
