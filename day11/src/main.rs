@@ -1,7 +1,5 @@
-use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
-
 
 // --- file read
 
@@ -31,16 +29,6 @@ impl From<char> for Cell {
     }
 }
 
-impl fmt::Display for Cell {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            Cell::Floor => '.',
-            Cell::Empty => 'L',
-            Cell::Occupied => '#'
-        })
-    }
-}
-
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct Layout {
     grid: Vec<Vec<Cell>>,
@@ -56,15 +44,6 @@ impl From<&str> for Layout {
             height: grid.len(),
             grid
         }
-    }
-}
-
-impl fmt::Display for Layout {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.grid.iter().try_for_each(|line| {
-            line.iter().try_for_each(|cell| write!(f, "{}", cell))?;
-            write!(f, "\n")
-        })
     }
 }
 
@@ -171,7 +150,6 @@ impl Layout {
             height: self.height,
             grid
         }
-
     }
 
     fn next_generation_v1(&self) -> Layout {
@@ -221,7 +199,6 @@ impl Layout {
             }
         )
     }
-
 }
 
 // --- problems
