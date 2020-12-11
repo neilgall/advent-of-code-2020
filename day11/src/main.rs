@@ -68,51 +68,39 @@ impl fmt::Display for Layout {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 struct Pos {
     x: usize,
     y: usize
 }
 
 impl Pos {
-    fn neighbours(&self) -> impl Iterator<Item = Pos> {
-        let ns = if self.x == 0 {
-            if self.y == 0 {
-                vec![
-                    Pos { x: 1, y: 0 },
-                    Pos { x: 0, y: 1 },
-                    Pos { x: 1, y: 1 }
-                ]
-            } else {
-                vec![
-                    Pos { x: 0, y: self.y - 1 },
-                    Pos { x: 0, y: self.y + 1 },
-                    Pos { x: 1, y: self.y - 1 },
-                    Pos { x: 1, y: self.y     },
-                    Pos { x: 1, y: self.y + 1 }
-                ]
-            }
-        } else if self.y == 0 {
-            vec![
-                Pos { x: self.x - 1, y: 0 },
-                Pos { x: self.x + 1, y: 0 },
-                Pos { x: self.x - 1, y: 1 },
-                Pos { x: self.x,     y: 1 },
-                Pos { x: self.x + 1, y: 1 }
-            ]
-        } else {
-            vec![
-                Pos { x: self.x - 1, y: self.y - 1 },
-                Pos { x: self.x    , y: self.y - 1 },
-                Pos { x: self.x + 1, y: self.y - 1 },
-                Pos { x: self.x - 1, y: self.y     },
-                Pos { x: self.x + 1, y: self.y     },
-                Pos { x: self.x - 1, y: self.y + 1 },
-                Pos { x: self.x    , y: self.y + 1 },
-                Pos { x: self.x + 1, y: self.y + 1 },
-            ]
-        };
-        ns.into_iter()
+    fn neighbours(&self) -> impl Iterator<Item = Pos> + '_ {
+        let xmin = if self.x == 0 { 0 } else { self.x - 1 };
+        let ymin = if self.y == 0 { 0 } else { self.y - 1 };
+        let xmax = self.x + 1;
+        let ymax = self.y + 1;
+        (ymin..=ymax).flat_map(
+            move |y| (xmin..=xmax).map(
+                move |x| Pos { x, y }
+            )
+        ).filter(move |p| p != self)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Offset {
+    x: i64,
+    y: i64
+}
+
+impl std::ops::Add<&Offset> for Pos {
+    type Output = Pos;
+    fn add(self, off: &Offset) -> Pos {
+        Pos { 
+            x: (self.x as i64 + off.x) as usize,
+            y: (self.y as i64 + off.y) as usize
+        }
     }
 }
 
@@ -132,26 +120,36 @@ impl Layout {
             ).count()
     }
 
-    fn next(&self, p: &Pos) -> Cell {
-        match self.current(p) {
-            Cell::Floor => Cell::Floor,
-            
-            Cell::Empty => {
-                if self.occupied_neighbours(p) == 0 {
-                    Cell::Occupied
-                } else {
-                    Cell::Empty
-                }
-            }
-
-            Cell::Occupied => {
-                if self.occupied_neighbours(p) >= 4 {
-                    Cell::Empty
-                } else {
-                    Cell::Occupied
+    fn find_seat_in_direction(&self, p: &Pos, dir: &Offset) -> Cell {
+        let mut pos = *p;
+        loop {
+            pos = pos + dir;
+            if !self.valid_pos(&pos) {
+                return Cell::Floor;
+            } else {
+                let c = self.current(&pos);
+                if c != Cell::Floor {
+                    return c;
                 }
             }
         }
+    }
+
+    fn visible_occupied_seats(&self, p: &Pos) -> usize {
+        let directions = vec![
+            Offset { x: -1, y: -1 },
+            Offset { x:  0, y: -1 },
+            Offset { x:  1, y: -1 },
+            Offset { x: -1, y:  0 },
+            Offset { x:  1, y:  0 },
+            Offset { x: -1, y:  1 },
+            Offset { x:  0, y:  1 },
+            Offset { x:  1, y:  1 }
+        ];
+
+        directions.iter()
+            .filter(|d| self.find_seat_in_direction(p, d) == Cell::Occupied)
+            .count()
     }
 
     fn iter(&self) -> impl Iterator<Item = Cell> + '_ {
@@ -162,10 +160,10 @@ impl Layout {
         self.iter().filter(|c| *c == Cell::Occupied).count()
     }
 
-    fn next_generation(&self) -> Layout {
+    fn next_generation<F>(&self, f: F) -> Layout where F: Fn(&Pos) -> Cell {
         let grid = self.grid.iter().enumerate().map(
              |(y,row)| row.iter().enumerate().map(
-                |(x,_)| self.next(&Pos { x, y })
+                |(x,_)| f(&Pos { x, y })
              ).collect()
         ).collect();
         Layout {
@@ -173,26 +171,81 @@ impl Layout {
             height: self.height,
             grid
         }
+
     }
+
+    fn next_generation_v1(&self) -> Layout {
+        self.next_generation(|p|
+            match self.current(p) {
+                Cell::Floor => Cell::Floor,
+                
+                Cell::Empty => {
+                    if self.occupied_neighbours(p) == 0 {
+                        Cell::Occupied
+                    } else {
+                        Cell::Empty
+                    }
+                }
+
+                Cell::Occupied => {
+                    if self.occupied_neighbours(p) >= 4 {
+                        Cell::Empty
+                    } else {
+                        Cell::Occupied
+                    }
+                }
+            }
+        )
+    }
+
+    fn next_generation_v2(&self) -> Layout {
+        self.next_generation(|p|
+            match self.current(p) {
+                Cell::Floor => Cell::Floor,
+
+                Cell::Empty => {
+                    if self.visible_occupied_seats(p) == 0 {
+                        Cell::Occupied
+                    } else {
+                        Cell::Empty
+                    }
+                }
+
+                Cell::Occupied => {
+                    if self.visible_occupied_seats(p) >= 5 {
+                        Cell::Empty
+                    } else {
+                        Cell::Occupied
+                    }
+                }
+            }
+        )
+    }
+
 }
 
 // --- problems
 
-fn part1(layout: &Layout) -> usize {
+fn run_until_stable<F>(layout: &Layout, f: F) -> Layout where F: Fn(&Layout) -> Layout {
     let mut current = layout.clone();
     loop {
-        let next = current.next_generation();
+        let next = f(&current);
         if next == current {
-            return current.count_occupied_seats();
+            return current;
         } else {
             current = next;
         }
     }
-    
+}
+
+fn part1(layout: &Layout) -> usize {
+    let stable = run_until_stable(layout, Layout::next_generation_v1);
+    stable.count_occupied_seats()    
 }
 
 fn part2(layout: &Layout) -> usize {
-    0
+    let stable = run_until_stable(layout, Layout::next_generation_v2);
+    stable.count_occupied_seats()
 }
 
 
@@ -296,9 +349,10 @@ mod tests {
     }
 
     #[test]
-    fn test_generations() {
+    fn test_generations_v1() {
         let layout = Layout::from(test_grid());
-        let gen1 = layout.next_generation();
+
+        let gen1 = layout.next_generation_v1();
         assert_eq!(gen1, Layout::from(
             "#.##.##.##
             #######.##
@@ -312,7 +366,7 @@ mod tests {
             #.#####.##"
         ));
 
-        let gen2 = gen1.next_generation();
+        let gen2 = gen1.next_generation_v1();
         assert_eq!(gen2, Layout::from(
             "#.LL.L#.##
              #LLLLLL.L#
@@ -326,7 +380,7 @@ mod tests {
              #.#LLLL.##"
         ));
 
-        let gen3 = gen2.next_generation();
+        let gen3 = gen2.next_generation_v1();
         assert_eq!(gen3, Layout::from(
             "#.##.L#.##
              #L###LL.L#
@@ -338,6 +392,53 @@ mod tests {
              #L######L#
              #.LL###L.L
              #.#L###.##"
+        ));
+    }
+
+    #[test]
+    fn test_generations_v2() {
+        let layout = Layout::from(test_grid());
+
+        let gen1 = layout.next_generation_v2();
+        assert_eq!(gen1, Layout::from(
+            "#.##.##.##
+             #######.##
+             #.#.#..#..
+             ####.##.##
+             #.##.##.##
+             #.#####.##
+             ..#.#.....
+             ##########
+             #.######.#
+             #.#####.##"
+        ));
+
+        let gen2 = gen1.next_generation_v2();
+        assert_eq!(gen2, Layout::from(
+            "#.LL.LL.L#
+             #LLLLLL.LL
+             L.L.L..L..
+             LLLL.LL.LL
+             L.LL.LL.LL
+             L.LLLLL.LL
+             ..L.L.....
+             LLLLLLLLL#
+             #.LLLLLL.L
+             #.LLLLL.L#"
+        ));
+
+        let gen3 = gen2.next_generation_v2();
+        assert_eq!(gen3, Layout::from(
+            "#.L#.##.L#
+             #L#####.LL
+             L.#.#..#..
+             ##L#.##.##
+             #.##.#L.##
+             #.#####.#L
+             ..#.#.....
+             LLL####LL#
+             #.L#####.L
+             #.L####.L#"
         ));
     }
 }
