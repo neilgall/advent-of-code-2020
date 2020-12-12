@@ -75,17 +75,38 @@ impl Direction {
     }
 }
 
-struct Ship {
+#[derive(Debug,PartialEq,Eq)]
+struct Pos {
     x: i64,
-    y: i64,
+    y: i64
+}
+
+impl Pos {
+    fn rotate_around(&self, origin: &Pos, rotation: Rotation) -> Pos {
+        let x = self.x - origin.x;
+        let y = self.y - origin.y;
+        let (new_x, new_y) = match rotation {
+            90 => (-y, x),
+            180 => (-x, -y),
+            270 => (y, -x),
+            _ => panic!("invalid rotation")
+        };
+        Pos {
+            x: origin.x + new_x,
+            y: origin.y + new_y
+        }
+    }
+}
+
+struct Ship {
+    pos: Pos,
     direction: Direction
 }
 
 impl Ship {
     fn new() -> Self {
         Ship {
-            x: 0,
-            y: 0,
+            pos: Pos { x: 0, y: 0 },
             direction: Direction::East
         }
     }
@@ -93,10 +114,10 @@ impl Ship {
     fn go(&mut self, inst: &Instruction) {
         use Instruction::*;
         match inst {
-            North(n) => self.y -= n,
-            South(n) => self.y += n,
-            East(n) => self.x += n,
-            West(n) => self.x -= n,
+            North(n) => self.pos.y += n,
+            South(n) => self.pos.y -= n,
+            East(n) => self.pos.x += n,
+            West(n) => self.pos.x -= n,
             Left(n) => self.direction = self.direction + n,
             Right(n) => self.direction = self.direction - n,
             Forward(n) => self.go(&self.direction.to_instruction(*n))
@@ -104,7 +125,45 @@ impl Ship {
     }
 
     fn manhattan_distance_from_start(&self) -> Distance {
-        self.x.abs() + self.y.abs()
+        self.pos.x.abs() + self.pos.y.abs()
+    }
+}
+
+struct WaypointShip {
+    ship: Pos,
+    waypoint: Pos
+}
+
+impl WaypointShip {
+    fn new() -> Self {
+        WaypointShip {
+            ship: Pos { x: 0, y : 0 },
+            waypoint: Pos { x: 10, y: 1 }
+        }
+    }
+
+    fn go(&mut self, inst: &Instruction) {
+        use Instruction::*;
+        match inst {
+            North(n) => self.waypoint.y += n,
+            South(n) => self.waypoint.y -= n,
+            East(n) => self.waypoint.x += n,
+            West(n) => self.waypoint.x -= n,
+            Left(n) => self.waypoint = self.waypoint.rotate_around(&self.ship, *n),
+            Right(n) => self.waypoint = self.waypoint.rotate_around(&self.ship, 360-(*n)),
+            Forward(n) => {
+                let x = (self.waypoint.x - self.ship.x) * n;
+                let y = (self.waypoint.y - self.ship.y) * n;
+                self.ship.x += x;
+                self.ship.y += y;
+                self.waypoint.x += x;
+                self.waypoint.y += y;
+            }
+        }
+    }
+
+    fn manhattan_distance_from_start(&self) -> Distance {
+        self.ship.x.abs() + self.ship.y.abs()
     }
 }
 
@@ -132,10 +191,17 @@ fn part1(instructions: &Vec<Instruction>) -> i64 {
     ship.manhattan_distance_from_start()
 }
 
+fn part2(instructions: &Vec<Instruction>) -> i64 {
+    let mut ship = WaypointShip::new();
+    instructions.iter().for_each(|i| ship.go(i));
+    ship.manhattan_distance_from_start()
+}
+
 fn main() {
     let input = read_file("./input.txt").unwrap();
     let instructions = parse_input(&input).unwrap().1;
     println!("part1 {}", part1(&instructions));
+    println!("part2 {}", part2(&instructions));
 }
 
 #[cfg(test)]
@@ -150,10 +216,38 @@ mod tests {
     }
 
     #[test]
-    fn test_follow_instructions() {
+    fn test_part1() {
         use Instruction::*;
         let instructions = vec![Forward(10), North(3), Forward(7), Right(90), Forward(11)];
         assert_eq!(part1(&instructions), 25);
+    }
+
+    #[test]
+    fn test_part2() {
+        use Instruction::*;
+        let instructions = vec![Forward(10), North(3), Forward(7), Right(90), Forward(11)];
+        assert_eq!(part2(&instructions), 286);
+    }
+
+    #[test]
+    fn test_rotate_around_90() {
+        let origin = Pos { x: 0, y: 0 };
+        let pos = Pos { x: 10, y: 1 };
+        assert_eq!(pos.rotate_around(&origin, 90), Pos { x: -1, y: 10 });
+    }
+
+    #[test]
+    fn test_rotate_around_180() {
+        let origin = Pos { x: 0, y: 0 };
+        let pos = Pos { x: 10, y: 1 };
+        assert_eq!(pos.rotate_around(&origin, 180), Pos { x: -10, y: -1 });
+    }
+
+    #[test]
+    fn test_rotate_around_270() {
+        let origin = Pos { x: 0, y: 0 };
+        let pos = Pos { x: 10, y: 1 };
+        assert_eq!(pos.rotate_around(&origin, 270), Pos { x: 1, y: -10 });
     }
 
 }
