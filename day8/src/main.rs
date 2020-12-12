@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::prelude::*;
-
-mod parser;
 use parser::*;
 
 // --- file read
