@@ -1,8 +1,6 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::ops::{Add, Sub};
-
-mod parser;
 use parser::*;
 
 // --- file read

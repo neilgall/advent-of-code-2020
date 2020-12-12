@@ -249,7 +249,7 @@ where
                     return Ok((input, result))
                 }
                 // matching the sep means we must match the next item
-                Ok((next_input, _)) => {
+                Ok(_) => {
                     if let Ok((next_input, next_item)) = parser.parse(input) {
                         input = next_input;
                         result.push(next_item);
