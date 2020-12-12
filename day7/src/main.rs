@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
-
-mod parser;
 use parser::*;
 
 // --- file read
@@ -44,20 +42,21 @@ struct RuleSet {
 
 fn parse_rule<'a>() -> impl Parser<'a, ContainsRule> {
     fn bag_color<'b>() -> impl Parser<'b, BagColor> {
-        let adjective = one_or_more(letter).map(|ls| ls.into_iter().collect());
+        let letter = any_char.pred(|c| c.is_alphabetic());
+        let adjective = one_or_more(letter.clone()).map(|ls| ls.into_iter().collect());
         let color = one_or_more(letter).map(|ls| ls.into_iter().collect());
 
-        pair(first(adjective, whitespace), color).map(|(a, c)| BagColor(a, c))
+        pair(whitespace_wrap(adjective), color, |a, c| BagColor(a, c))
     }
 
     fn container<'b>() -> impl Parser<'b, BagColor> {
-        first(bag_color(), string(" bags contain "))
+        left(bag_color(), match_literal(" bags contain "))
     }
 
-    let bag_or_bags = string(" bags, ").or(string(" bag, ")).or(string(" bags.")).or(string(" bag."));
-    let contained = pair(first(integer, whitespace), first(bag_color(), bag_or_bags));
+    let bag_or_bags = match_literal(" bags, ").or(match_literal(" bag, ")).or(match_literal(" bags.")).or(match_literal(" bag."));
+    let contained = pair(whitespace_wrap(integer), left(bag_color(), bag_or_bags), |n, c| (n, c));
 
-    let contents_rule = pair(container(), one_or_more(contained)).map(|(color, contents)| 
+    let contents_rule = pair(container(), one_or_more(contained), |color, contents| 
         ContainsRule {
             container: color.clone(),
             contents: contents.iter().map(|(n, c)| Content {
@@ -67,7 +66,7 @@ fn parse_rule<'a>() -> impl Parser<'a, ContainsRule> {
         }
     );
 
-    let no_contents_rule = first(container(), string("no other bags.")).map(|color| 
+    let no_contents_rule = left(container(), match_literal("no other bags.")).map(|color| 
         ContainsRule {
             container: color,
             contents: vec![]
@@ -78,7 +77,7 @@ fn parse_rule<'a>() -> impl Parser<'a, ContainsRule> {
 }
 
 fn parse_input(input: &str) -> ParseResult<RuleSet> {
-    let rule_set = one_or_more(first(parse_rule(), whitespace));
+    let rule_set = one_or_more(whitespace_wrap(parse_rule()));
 
     rule_set.parse(input).map(|(rest, rules)| {
         let rule_set = RuleSet { 
@@ -193,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_parse_records_separated_by_lines() {
-        let p = one_or_more(first(letter, whitespace));
+        let p = one_or_more(whitespace_wrap(any_char));
         assert_eq!(p.parse("a\nb\nc\n"), Ok(("", vec!['a', 'b', 'c'])));
     }
 }
