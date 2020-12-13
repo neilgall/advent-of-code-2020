@@ -249,8 +249,8 @@ where
                     return Ok((input, result))
                 }
                 // matching the sep means we must match the next item
-                Ok(_) => {
-                    if let Ok((next_input, next_item)) = parser.parse(input) {
+                Ok((next_input, _)) => {
+                    if let Ok((next_input, next_item)) = parser.parse(next_input) {
                         input = next_input;
                         result.push(next_item);
                     } else {
@@ -431,6 +431,12 @@ mod tests {
     }
 
     #[test]
+    fn means_combinator() {
+        let parser = match_literal("foo").means("bar");
+        assert_eq!(Ok(("", "bar")), parser.parse("foo"));
+    }
+
+    #[test]
     fn pair_combinator() {
         let tag_opener = right(match_literal("<"), identifier);
         assert_eq!(
@@ -465,10 +471,24 @@ mod tests {
     }
 
     #[test]
+    fn sep_by_combinator() {
+        let parser = integer.sep_by(match_literal(","));
+        assert_eq!(Ok(("", vec![1,2,3,4])), parser.parse("1,2,3,4"));
+    }
+
+    #[test]
     fn quoted_string_parser() {
         assert_eq!(
             Ok(("", "Hello Joe!".to_string())),
             quoted_string().parse("\"Hello Joe!\"")
+        );
+    }
+
+    #[test]
+    fn integer_parsre() {
+        assert_eq!(
+            Ok(("foo", 123)),
+            integer.parse("123foo")
         );
     }
 }
