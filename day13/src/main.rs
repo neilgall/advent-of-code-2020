@@ -43,13 +43,10 @@ impl From<&str> for Input {
 
 impl Input {
     fn next_bus_departing(&self) -> Option<(BusID, Timestamp)> {
-        let buses_with_wait_times: Vec<(BusID, Timestamp)> = self.bus_ids.iter()
+        self.bus_ids.iter()
             .filter_map(|maybe_id| *maybe_id)
             .map(|id| (id, id - (self.estimate % id)))
-            .collect();
-
-        buses_with_wait_times.iter().min_by_key(|(_id, wait_time)| wait_time)
-            .map(|r| r.clone())
+            .min_by_key(|(_id, wait_time)| *wait_time)
     }
 
     fn find_first_aligned_timestamp(&self, after: Timestamp) -> Timestamp {
