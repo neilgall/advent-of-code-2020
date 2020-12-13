@@ -49,13 +49,17 @@ impl Input {
             .min_by_key(|(_id, wait_time)| *wait_time)
     }
 
-    fn find_first_aligned_timestamp(&self, after: Timestamp) -> Timestamp {
-        // pair the valid bus IDs with their index (i.e. offset from the base timestamp)
+    fn bus_ids_with_departure_offsets(&self) -> impl Iterator<Item = (BusID, Timestamp)> + '_ {
 
-        let indexed_bus_ids: Vec<(usize, BusID)> = self.bus_ids.iter()
+        // find the valid bus IDs and pair them with their position in the 
+        // list, which equates to the departure offset in minutes
+
+        self.bus_ids.iter()
             .enumerate()
-            .filter_map(|(index, maybe_id)| maybe_id.map(|id| (index, id)))
-            .collect();
+            .filter_map(|(index, maybe_id)| maybe_id.map(|id| (id, index as Timestamp) ))        
+    }
+
+    fn find_first_aligned_timestamp(&self, after: Timestamp) -> Timestamp {
 
         // for each bus, find a new base timestamp after the current timestamp at which
         // the bus leaves (subject to its indexed departure offset), and a time increment
@@ -66,17 +70,18 @@ impl Input {
         // this is possibly a deliberate design of the input data to make the problem
         // easier - thay do all seem to be primes)
 
-        indexed_bus_ids.iter().fold( (after, 1), |(base_timestamp, increment), (index, bus_id)| {
-            let index = *index as Timestamp;
-            (0..).find_map(|i| {
-                let timestamp = base_timestamp + i * increment;
-                if (timestamp + index) % bus_id == 0 {
-                    Some( (timestamp, increment * bus_id) )
-                } else {
-                    None
-                }
-            }).unwrap()
-        }).0
+        self.bus_ids_with_departure_offsets().fold(
+            (after, 1),
+            |(base_timestamp, increment), (bus_id, offset)|
+                (0..).find_map(|i| {
+                    let timestamp = base_timestamp + i * increment;
+                    if (timestamp + offset) % bus_id == 0 {
+                        Some( (timestamp, increment * bus_id) )
+                    } else {
+                        None
+                    }
+                }).unwrap()
+        ).0
     }
 }
 
