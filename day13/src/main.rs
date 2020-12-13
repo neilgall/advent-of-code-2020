@@ -52,17 +52,6 @@ impl Input {
             .map(|r| r.clone())
     }
 
-    fn buses_align_at_timestamp(&self, timestamp: Timestamp) -> bool {
-        self.bus_ids.iter()
-            .enumerate()
-            .all(|(index,maybe_id)| 
-                match maybe_id {
-                    Some(id) => (timestamp + index as Timestamp) % id == 0,
-                    None => true
-                }
-            )
-    }
-
     fn find_first_aligned_timestamp(&self, after: Timestamp) -> Timestamp {
         let indexed_bus_ids: Vec<(usize, BusID)> = self.bus_ids.iter()
             .enumerate()
@@ -114,14 +103,6 @@ mod tests {
     fn test_next_bus_departing() {
         let input = Input::from("939\n7,13,x,x,59,x,31,19");
         assert_eq!(input.next_bus_departing(), Some((59, 5)));        
-    }
-
-    #[test]
-    fn test_buses_align_at_timestamp() {
-        let input = Input::from("939\n7,13,x,x,59,x,31,19");
-        assert!(input.buses_align_at_timestamp(1068781));        
-        assert!(!input.buses_align_at_timestamp(1068780));        
-        assert!(!input.buses_align_at_timestamp(1068782));        
     }
 
     #[test]
