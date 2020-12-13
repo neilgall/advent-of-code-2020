@@ -54,13 +54,10 @@ impl Input {
 
     fn find_first_aligned_timestamp(&self, after: Timestamp) -> Timestamp {
         // pair the valid bus IDs with their index (i.e. offset from the base timestamp)
-        // and sort in reverse order by ID to apply the largest factors to the increment
-        // first
 
         let indexed_bus_ids: Vec<(usize, BusID)> = self.bus_ids.iter()
             .enumerate()
             .filter_map(|(index, maybe_id)| maybe_id.map(|id| (index, id)))
-            .rev()
             .collect();
 
         // for each bus, find a new base timestamp after the current timestamp at which
@@ -69,7 +66,8 @@ impl Input {
 
         // (the increment is a product of all bus ids, which passes all tests and finds
         // the right answer, but technically it should only count common factors once each;
-        // this is possibly a deliberate design of the input data to make the problem easier)
+        // this is possibly a deliberate design of the input data to make the problem
+        // easier - thay do all seem to be primes)
 
         indexed_bus_ids.iter().fold( (after, 1), |(base_timestamp, increment), (index, bus_id)| {
             let index = *index as Timestamp;
