@@ -30,7 +30,6 @@ impl From<&str> for Input {
 
         let bus_ids = bus_id.sep_by(match_literal(","));
 
-
         let input = pair(whitespace_wrap(integer), bus_ids,
             |estimate, bus_ids| Input { estimate, bus_ids }
         );
@@ -62,21 +61,21 @@ impl Input {
     fn find_first_aligned_timestamp(&self, after: Timestamp) -> Timestamp {
 
         // for each bus, find a new base timestamp after the current timestamp at which
-        // the bus leaves (subject to its indexed departure offset), and a time increment
+        // the bus leaves (subject to its indexed departure offset), and a repetition period
         // which is true for all buses examined so far
 
-        // (the increment is a product of all bus ids, which passes all tests and finds
+        // (the period is a product of all bus ids, which passes all tests and finds
         // the right answer, but technically it should only count common factors once each;
         // this is possibly a deliberate design of the input data to make the problem
         // easier - thay do all seem to be primes)
 
         self.bus_ids_with_departure_offsets().fold(
             (after, 1),
-            |(base_timestamp, increment), (bus_id, offset)|
+            |(base_timestamp, period), (bus_id, offset)|
                 (0..).find_map(|i| {
-                    let timestamp = base_timestamp + i * increment;
+                    let timestamp = base_timestamp + i * period;
                     if (timestamp + offset) % bus_id == 0 {
-                        Some( (timestamp, increment * bus_id) )
+                        Some( (timestamp, period * bus_id) )
                     } else {
                         None
                     }
@@ -92,7 +91,6 @@ fn part1(input: &Input) -> Option<i64> {
 fn part2(input: &Input) -> Timestamp {
     input.find_first_aligned_timestamp(100000000000000)
 }
-
 
 fn main() {
     let input = Input::from(read_file("./input.txt").unwrap().as_str());
