@@ -21,35 +21,36 @@ impl NumberGame {
             last_spoken: 0
         }
     }
+}
 
-    fn iter(&mut self) -> impl Iterator<Item = i64> + '_ {
-        std::iter::from_fn(move || {
-            let next_number = if self.next_turn < self.starting_numbers.len() {
-                self.starting_numbers[self.next_turn]
-            } else {
-                let last = self.last_turns.get(&self.last_spoken).unwrap();
-                match self.prev_turns.get(&self.last_spoken) {
-                    None => 0,
-                    Some(prev) => (last - prev) as Number
-                }
-            };
+impl Iterator for NumberGame {
+    type Item = Number;
 
-            if let Some(prev) = self.last_turns.get(&next_number) {
-                self.prev_turns.insert(next_number, *prev);
+    fn next(&mut self) -> Option<Number> {
+        let next_number = if self.next_turn < self.starting_numbers.len() {
+            self.starting_numbers[self.next_turn]
+        } else {
+            let last = self.last_turns.get(&self.last_spoken).unwrap();
+            match self.prev_turns.get(&self.last_spoken) {
+                None => 0,
+                Some(prev) => (last - prev) as Number
             }
-            self.last_turns.insert(next_number, self.next_turn);
-            self.last_spoken = next_number;
-            self.next_turn += 1;
+        };
 
-            Some(next_number)
-        })
+        if let Some(prev) = self.last_turns.get(&next_number) {
+            self.prev_turns.insert(next_number, *prev);
+        }
+        self.last_turns.insert(next_number, self.next_turn);
+        self.last_spoken = next_number;
+        self.next_turn += 1;
+
+        Some(next_number)
     }
 }
 
 
 fn number_spoken_at_index(starting_numbers: &[Number], target_index: Turn) -> Number {
     NumberGame::new(starting_numbers)
-        .iter()
         .skip(target_index - 1)
         .next()
         .unwrap()
