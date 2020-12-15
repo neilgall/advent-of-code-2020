@@ -1,16 +1,5 @@
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::prelude::*;
 use parser::*;
-
-// --- file read
-
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
 
 // --- model
 
@@ -118,7 +107,7 @@ fn part2(program: &Program) -> Option<i64> {
 }
 
 fn main() {
-    let input = read_file("./input.txt").unwrap();
+    let input = std::fs::read_to_string("./input.txt").unwrap();
     let program: Program = parse_input(&input).unwrap().1;
 
     println!("part1 {:?}", part1(&program));

@@ -1,16 +1,5 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
 use parser::*;
-
-// --- file read
-
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
 
 // --- model
 
@@ -124,7 +113,7 @@ impl RuleSet {
 }
 
 fn main() {
-    let input = read_file("./input.txt").unwrap();
+    let input = std::fs::read_to_string("./input.txt").unwrap();
     let rules: RuleSet = parse_input(&input).unwrap().1;
 
     println!("part1 {}", rules.part1());

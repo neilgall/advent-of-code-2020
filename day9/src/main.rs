@@ -1,15 +1,4 @@
-use std::fs::File;
-use std::io::prelude::*;
-
-
-// --- file read
-
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
+// --- parser
 
 fn parse_input(input: &str) -> Vec<i64> {
     input.split_ascii_whitespace().map(|s| s.parse().unwrap()).collect()
@@ -74,7 +63,7 @@ fn part2(sequence: &Vec<i64>) -> Option<i64> {
 
 
 fn main() {
-    let input = read_file("./input.txt").unwrap();
+    let input = std::fs::read_to_string("./input.txt").unwrap();
     let sequence = parse_input(&input);
     println!("part1 {:?}", part1(&sequence));
     println!("part2 {:?}", part2(&sequence));

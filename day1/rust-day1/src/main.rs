@@ -1,14 +1,7 @@
 
-use std::fs::File;
-use std::io::prelude::*;
 
-
-fn read_file(filename: &str) -> std::io::Result<Vec<i64>> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    let input = contents.lines().filter_map(|line| line.parse().ok()).collect();
-    Ok(input)
+fn parse_input(input: &str) -> Vec<i64> {
+    input.lines().filter_map(|line| line.parse().ok()).collect()
 }
 
 fn part1(input: &Vec<i64>) -> i64 {
@@ -34,7 +27,7 @@ fn part2(input: &Vec<i64>) -> i64 {
 
 
 fn main() {
-    let input = read_file("../input.txt").unwrap();
+    let input = parse_input(&std::fs::read_to_string("../input.txt").unwrap());
     println!("Part1 {}", part1(&input));
     println!("Part2 {}", part2(&input));
 }

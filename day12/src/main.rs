@@ -1,16 +1,5 @@
-use std::fs::File;
-use std::io::prelude::*;
 use std::ops::{Add, Sub};
 use parser::*;
-
-// --- file read
-
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
 
 // --- model
 
@@ -198,7 +187,7 @@ fn part2(instructions: &Vec<Instruction>) -> i64 {
 }
 
 fn main() {
-    let input = read_file("./input.txt").unwrap();
+    let input = std::fs::read_to_string("./input.txt").unwrap();
     let instructions = parse_input(&input).unwrap().1;
     println!("part1 {}", part1(&instructions));
     println!("part2 {}", part2(&instructions));

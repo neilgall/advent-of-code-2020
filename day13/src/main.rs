@@ -1,15 +1,4 @@
-use std::fs::File;
-use std::io::prelude::*;
 use parser::*;
-
-// --- file read
-
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
 
 // -- model
 
@@ -93,7 +82,7 @@ fn part2(input: &Input) -> Timestamp {
 }
 
 fn main() {
-    let input = Input::from(read_file("./input.txt").unwrap().as_str());
+    let input = Input::from(std::fs::read_to_string("./input.txt").unwrap().as_str());
     println!("part1 {:?}", part1(&input));
     println!("part2 {:?}", part2(&input));
 }

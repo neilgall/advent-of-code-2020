@@ -1,8 +1,6 @@
 
 mod parser;
 
-use std::fs::File;
-use std::io::prelude::*;
 use std::ops::Range;
 use parser::*;
 
@@ -35,13 +33,6 @@ fn password(input: &str) -> ParseResult<Password> {
 
 // --- input file
 
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
 fn parse_input(input: &str) -> ParseResult<Vec<Password>> {
     let p = one_or_more(first(password, whitespace));
     p.parse(input)
@@ -72,7 +63,7 @@ fn part2(passwords: &Vec<Password>) -> usize {
 }
 
 fn main() {
-    let input = read_file("../input.txt").unwrap();
+    let input = std::fs::read_to_string("../input.txt").unwrap();
     let (_, passwords) = parse_input(&input).unwrap();
     println!("part1 {}", part1(&passwords));
     println!("part2 {}", part2(&passwords));

@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
 use std::ops::RangeInclusive;
 use std::str::Chars;
 
@@ -127,13 +125,6 @@ impl PassportData {
 
 // --- input file
 
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
 fn parse_input(input: &str) -> Vec<PassportData> {
     let tag = map(one_or_more(letter), |ls| ls.iter().collect());
     let value = map(one_or_more(non_whitespace), |cs| cs.iter().collect());
@@ -157,7 +148,7 @@ fn part2(data: &Vec<PassportData>) -> usize {
 }
 
 fn main() {
-    let input = read_file("./input.txt").unwrap();
+    let input = std::fs::read_to_string("./input.txt").unwrap();
     let passport_data = parse_input(&input);
     println!("part1 {}", part1(&passport_data));
     println!("part2 {}", part2(&passport_data));

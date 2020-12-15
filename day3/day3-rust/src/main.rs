@@ -1,7 +1,4 @@
 
-use std::fs::File;
-use std::io::prelude::*;
-
 // --- model
 
 #[derive(Debug)]
@@ -60,13 +57,6 @@ impl Model {
 
 // --- input file
 
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
 fn parse_input(input: &str) -> Model {
     let bitmap: Vec<Vec<char>> = input.lines().map(|line| line.trim().chars().collect()).collect();
     let min_length = bitmap.iter().map(|row| row.len()).min();
@@ -105,7 +95,7 @@ fn part2(model: &Model) -> usize {
 }
 
 fn main() {
-    let input = read_file("../input.txt").unwrap();
+    let input = std::fs::read_to_string("../input.txt").unwrap();
     let model = parse_input(&input);
     println!("part1 {}", part1(&model));
     println!("part2 {}", part2(&model));

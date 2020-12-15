@@ -1,16 +1,6 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::prelude::*;
 
-
-// --- file read
-
-fn read_file(filename: &str) -> std::io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
+// -- parser
 
 fn parse_input(input: &str) -> Vec<i64> {
     input.split_ascii_whitespace().map(|s| s.parse().unwrap()).collect()
@@ -76,7 +66,7 @@ fn part2(adapters: &Vec<i64>) -> usize {
 
 
 fn main() {
-    let input = read_file("./input.txt").unwrap();
+    let input = std::fs::read_to_string("./input.txt").unwrap();
     let adapters = parse_input(&input);
     println!("part1 {:?}", part1(&adapters));
     println!("part2 {:?}", part2(&adapters));
