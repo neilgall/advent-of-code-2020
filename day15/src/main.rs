@@ -13,13 +13,8 @@ struct NumberGame {
 
 impl NumberGame {
     fn new(starting_numbers: &[Number]) -> Self {
-        let last_turns = starting_numbers.iter()
-            .enumerate()
-            .map(|(index, number)| (*number, index))
-            .collect();
-
         NumberGame {
-            last_turns,
+            last_turns: HashMap::new(),
             prev_turns: HashMap::new(),
             starting_numbers: starting_numbers.iter().cloned().collect(),
             next_turn: 0,
