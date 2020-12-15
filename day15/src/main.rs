@@ -24,7 +24,7 @@ impl NumberGame {
 
     fn iter(&mut self) -> impl Iterator<Item = i64> + '_ {
         std::iter::from_fn(move || {
-            let next: Number = if self.next_turn < self.starting_numbers.len() {
+            let next_number = if self.next_turn < self.starting_numbers.len() {
                 self.starting_numbers[self.next_turn]
             } else {
                 let last = self.last_turns.get(&self.last_spoken).unwrap();
@@ -34,14 +34,14 @@ impl NumberGame {
                 }
             };
 
-            if let Some(prev) = self.last_turns.get(&next) {
-                self.prev_turns.insert(next, *prev);
+            if let Some(prev) = self.last_turns.get(&next_number) {
+                self.prev_turns.insert(next_number, *prev);
             }
-            self.last_turns.insert(next, self.next_turn);
-            self.last_spoken = next;
+            self.last_turns.insert(next_number, self.next_turn);
+            self.last_spoken = next_number;
             self.next_turn += 1;
 
-            Some(next)
+            Some(next_number)
         })
     }
 }
