@@ -52,7 +52,7 @@ impl NumberGame {
 }
 
 
-fn part1(starting_numbers: &[Number], target_index: Turn) -> Number {
+fn number_spoken_at_index(starting_numbers: &[Number], target_index: Turn) -> Number {
     NumberGame::new(starting_numbers)
         .iter()
         .skip(target_index - 1)
@@ -60,9 +60,19 @@ fn part1(starting_numbers: &[Number], target_index: Turn) -> Number {
         .unwrap()
 }
 
+fn part1(starting_numbers: &[Number]) -> Number {
+    number_spoken_at_index(starting_numbers, 2020)
+}
+
+fn part2(starting_numbers: &[Number]) -> Number {
+    number_spoken_at_index(starting_numbers, 30000000)
+}
+
+
 fn main() {
     let input = [15,5,1,4,7,0];
-    println!("part 1 {}", part1(&input, 2020));
+    println!("part 1 {}", part1(&input));
+    println!("part 2 {}", part2(&input));
 }
 
 #[cfg(test)]
@@ -70,7 +80,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_part1() {
-        assert_eq!(part1(&[0,3,6], 10), 0);
+    fn test_number_spoken_at_index() {
+        assert_eq!(number_spoken_at_index(&[0,3,6], 10), 0);
+        assert_eq!(number_spoken_at_index(&[0,3,6], 30000000), 175594);
     }
 }
