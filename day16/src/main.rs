@@ -41,6 +41,10 @@ impl TicketData {
             .sum()
     }
 
+    fn ticket_has_invalid_fields(&self, ticket: &Ticket) -> bool {
+        ticket.iter().any(|value| self.is_invalid_value_for_any_field(value))
+    }
+
     fn ticket_scanning_error_rate(&self) -> i64 {
         self.nearby_tickets.iter()
             .map(|ticket| self.ticket_errors(ticket))
@@ -49,7 +53,7 @@ impl TicketData {
 
     fn valid_tickets<'a>(&'a self) -> impl Iterator<Item = &'a Ticket> + 'a {
         self.nearby_tickets.iter()
-            .filter(move |ticket| self.ticket_errors(ticket) == 0)
+            .filter(move |ticket| !self.ticket_has_invalid_fields(ticket))
     }
 
     fn find_field_indices(&self) -> HashMap<String, usize> {
@@ -60,18 +64,13 @@ impl TicketData {
                 ticket,
                 |value, field_name| self.is_invalid_value_for_field(value, field_name)
             );
-
-            println!("ticket {:?}", ticket);
-            matcher.debug();
         });
 
 
         while !matcher.is_fully_determined() {
-            matcher.debug();
             matcher.eliminate_determined_indices();
         }
 
-        matcher.debug();
         matcher.flatten()
     }
 }
