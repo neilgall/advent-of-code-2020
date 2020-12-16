@@ -1,5 +1,5 @@
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::RangeInclusive;
 use parser::*;
 
@@ -25,6 +25,12 @@ impl Ranges {
 }
 
 impl TicketData {
+    fn is_invalid_value_for_field(&self, value: &i64, field: &str) -> bool {
+        self.field_ranges.get(field)
+            .map(|r| !r.contains(value))
+            .unwrap()
+    }
+
     fn is_invalid_value_for_any_field(&self, value: &i64) -> bool {
         self.field_ranges.values().all(|r| !r.contains(value))
     }
@@ -40,7 +46,103 @@ impl TicketData {
             .map(|ticket| self.ticket_errors(ticket))
             .sum()
     }
+
+    fn valid_tickets<'a>(&'a self) -> impl Iterator<Item = &'a Ticket> + 'a {
+        self.nearby_tickets.iter()
+            .filter(move |ticket| self.ticket_errors(ticket) == 0)
+    }
+
+    fn find_field_indices(&self) -> HashMap<String, usize> {
+        let mut matcher = FieldMatcher::new(self);
+
+        self.valid_tickets().for_each(|ticket| {
+            matcher.eliminate_indices_for_ticket(
+                ticket,
+                |value, field_name| self.is_invalid_value_for_field(value, field_name)
+            );
+
+            println!("ticket {:?}", ticket);
+            matcher.debug();
+        });
+
+
+        while !matcher.is_fully_determined() {
+            matcher.debug();
+            matcher.eliminate_determined_indices();
+        }
+
+        matcher.debug();
+        matcher.flatten()
+    }
 }
+
+struct FieldMatcher {
+    ordered_fields: Vec<String>,
+    possible_indices: HashMap<String, HashSet<usize>>
+}
+
+impl FieldMatcher {
+    fn new(ticket_data: &TicketData) -> Self {
+        let mut ordered_fields: Vec<String> = ticket_data.field_ranges.keys().cloned().collect();
+        ordered_fields.sort();
+
+        let all_indices: HashSet<usize> = (0..ticket_data.your_ticket.len()).collect();
+
+        let possible_indices: HashMap<String, HashSet<usize>> = ticket_data.field_ranges.iter()
+            .map(|(name, _)| (name.clone(), all_indices.clone()))
+            .collect();
+
+        FieldMatcher {
+            ordered_fields,
+            possible_indices
+        }
+    }
+
+    fn eliminate_indices_for_ticket<F>(&mut self, ticket: &Ticket, is_invalid: F)
+        where F: Fn(&i64, &str) -> bool
+    {
+        ticket.iter().enumerate()
+            .for_each(|(index, value)| {
+                self.possible_indices.iter_mut().for_each(|(field_name, indices)| {
+                    if is_invalid(value, field_name) {
+                        indices.remove(&index);
+                    }
+                })
+            })
+    }
+
+    fn eliminate_determined_indices(&mut self) {
+        let determined: HashSet<usize> =
+            self.possible_indices.values()
+                .filter(|ns| ns.len() == 1)
+                .flat_map(|ns| ns.iter().cloned())
+                .collect();
+
+        self.possible_indices.values_mut()
+            .filter(|ns| ns.len() > 1)
+            .for_each(|ns| *ns = ns.difference(&determined).cloned().collect());
+    }
+
+    fn is_fully_determined(&self) -> bool {
+        self.possible_indices.values().all(|ns| ns.len() == 1)
+    }
+
+    fn flatten(&self) -> HashMap<String, usize> {
+        self.possible_indices.iter()
+            .map(|(name, ns)| (name.clone(), *ns.iter().next().unwrap()))
+            .collect()
+    }
+
+    fn debug(&self) {
+        self.ordered_fields.iter().for_each(|f| {
+            let mut ns: Vec<&usize> = self.possible_indices.get(f).unwrap().iter().collect();
+            ns.sort();
+            println!("{:20} -> {:?}", f, ns);
+        });
+        println!();
+    }   
+}
+
 
 // --- parser
 
@@ -91,11 +193,25 @@ fn part1(ticket_data: &TicketData) -> i64 {
     ticket_data.ticket_scanning_error_rate()
 }
 
+fn part2(ticket_data: &TicketData) -> i64 {
+    let indices = ticket_data.find_field_indices();
+
+    let values: Vec<&i64> = indices.iter()
+        .filter(|(name, _)| name.starts_with("departure"))
+        .map(|(_, index)| ticket_data.your_ticket.get(*index).unwrap())
+        .collect();
+
+    assert_eq!(values.len(), 6);
+
+    values.into_iter().product()
+}
+
 fn main() {
     let input = std::fs::read_to_string("./input.txt").unwrap();
     let ticket_data = parse_input(&input).unwrap().1;
 
     println!("part 1 {:?}", part1(&ticket_data));
+    println!("part 2 {:?}", part2(&ticket_data));
 }
 
 
@@ -146,5 +262,15 @@ mod tests {
     #[test]
     fn test_ticket_scanning_error_rate() {
         assert_eq!(sample_data().ticket_scanning_error_rate(), 71);
+    }
+
+    #[test]
+    fn test_find_field_indices() {
+        let indices = sample_data().find_field_indices();
+        assert_eq!(indices, hashmap![
+            "row".to_string() => 0,
+            "class".to_string() => 1,
+            "seat".to_string() => 2
+        ]);
     }
 }
