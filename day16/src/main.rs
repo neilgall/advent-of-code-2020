@@ -18,6 +18,32 @@ struct TicketData {
     nearby_tickets: Vec<Ticket>
 }
 
+impl Ranges {
+    fn contains(&self, value: &i64) -> bool {
+        self.0.iter().any(|r| r.contains(value))
+    }
+}
+
+impl TicketData {
+    fn is_invalid_value_for_any_field(&self, value: &i64) -> bool {
+        self.field_ranges.values().all(|r| !r.contains(value))
+    }
+
+    fn ticket_errors(&self, ticket: &Ticket) -> i64 {
+        ticket.iter()
+            .filter(|value| self.is_invalid_value_for_any_field(value))
+            .sum()
+    }
+
+    fn ticket_scanning_error_rate(&self) -> i64 {
+        self.nearby_tickets.iter()
+            .map(|ticket| self.ticket_errors(ticket))
+            .sum()
+    }
+}
+
+// --- parser
+
 fn parse_input(input: &str) -> ParseResult<TicketData> {
     let range = pair(
         left(integer, match_literal("-")),
@@ -61,8 +87,8 @@ fn parse_input(input: &str) -> ParseResult<TicketData> {
 
 // --- problems
 
-fn part1(ticket_data: &TicketData) -> usize {
-    0
+fn part1(ticket_data: &TicketData) -> i64 {
+    ticket_data.ticket_scanning_error_rate()
 }
 
 fn main() {
@@ -115,5 +141,10 @@ mod tests {
         );
 
         assert_eq!(ticket_data, Ok(("", sample_data())));
+    }
+
+    #[test]
+    fn test_ticket_scanning_error_rate() {
+        assert_eq!(sample_data().ticket_scanning_error_rate(), 71);
     }
 }
