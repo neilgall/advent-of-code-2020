@@ -59,12 +59,12 @@ impl TicketData {
     fn find_field_indices(&self) -> HashMap<String, usize> {
         let mut matcher = FieldMatcher::new(self);
 
-        self.valid_tickets().for_each(|ticket| {
+        for ticket in self.valid_tickets() {
             matcher.eliminate_indices_for_ticket(
                 ticket,
                 |value, field_name| self.is_invalid_value_for_field(value, field_name)
             );
-        });
+        };
 
 
         while !matcher.is_fully_determined() {
@@ -100,14 +100,13 @@ impl FieldMatcher {
     fn eliminate_indices_for_ticket<F>(&mut self, ticket: &Ticket, is_invalid: F)
         where F: Fn(&i64, &str) -> bool
     {
-        ticket.iter().enumerate()
-            .for_each(|(index, value)| {
-                self.possible_indices.iter_mut().for_each(|(field_name, indices)| {
-                    if is_invalid(value, field_name) {
-                        indices.remove(&index);
-                    }
-                })
-            })
+        for (index, value) in ticket.iter().enumerate() {
+            for (field_name, indices) in self.possible_indices.iter_mut() {
+                if is_invalid(value, field_name) {
+                    indices.remove(&index);
+                }
+            }
+        }
     }
 
     fn eliminate_determined_indices(&mut self) {
@@ -117,9 +116,9 @@ impl FieldMatcher {
                 .flat_map(|ns| ns.iter().cloned())
                 .collect();
 
-        self.possible_indices.values_mut()
-            .filter(|ns| ns.len() > 1)
-            .for_each(|ns| *ns = ns.difference(&determined).cloned().collect());
+        for ns in self.possible_indices.values_mut().filter(|ns| ns.len() > 1) {
+            *ns = ns.difference(&determined).cloned().collect();
+        }
     }
 
     fn is_fully_determined(&self) -> bool {
@@ -133,11 +132,11 @@ impl FieldMatcher {
     }
 
     fn debug(&self) {
-        self.ordered_fields.iter().for_each(|f| {
-            let mut ns: Vec<&usize> = self.possible_indices.get(f).unwrap().iter().collect();
+        for field in self.ordered_fields.iter() {
+            let mut ns: Vec<&usize> = self.possible_indices.get(field).unwrap().iter().collect();
             ns.sort();
-            println!("{:20} -> {:?}", f, ns);
-        });
+            println!("{:20} -> {:?}", field, ns);
+        }
         println!();
     }   
 }
