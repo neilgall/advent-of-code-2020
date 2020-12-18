@@ -36,7 +36,7 @@ where
 
             Token::Add | Token::Mul => {
                 while let Some(t) = stack.last() {
-                    if precedence(token, *t) {
+                    if *t == &Token::Add || *t == &Token::Mul && precedence(token, *t) {
                         result.push(*t);
                         stack.pop();
                     } else {
@@ -70,11 +70,11 @@ where
 }
 
 fn shunting_yard_v1(tokens: &[Token]) -> Vec<&Token> {
-    shunting_yard(tokens, |_, t| t == &Token::Add || t == &Token::Mul)
+    shunting_yard(tokens, |_, _| true)
 }
 
 fn shunting_yard_v2(tokens: &[Token]) -> Vec<&Token> {
-    shunting_yard(tokens, |t1, t2| (t2 == &Token::Add || t2 == &Token::Mul) && !(t2 == &Token::Mul && t1 == &Token::Add))
+    shunting_yard(tokens, |t1, t2| !(t1 == &Token::Add && t2 == &Token::Mul))
 }
 
 fn eval_rp(tokens: &[&Token]) -> i64 {
