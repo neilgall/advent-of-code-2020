@@ -81,10 +81,10 @@ impl Rules {
 
     fn match_all<'a>(&self, input: &'a str) -> Result<(), &'a str> {
         let r = self.match_rule(&0, input);
-        if r.is_empty() || !r.iter().next().unwrap().is_empty() {
-            Err(input)
-        } else {
-            Ok(())
+        match r.iter().next() {
+            None => Err("no match"),
+            Some(s) if s.is_empty() => Ok(()),
+            _ => Err("extra unmatched input")
         }
     }
 
@@ -263,7 +263,7 @@ aabbbbbaabbbaaaaaabbbbbababaaaaabbaaabba".lines()
     fn test_match_all() {
         let rules = sample_rules();
         assert_eq!(rules.match_all("abbbab"), Ok(()));
-        assert_eq!(rules.match_all("aaaabbb"), Err("aaaabbb"));        
+        assert_eq!(rules.match_all("aaaabbb"), Err("extra unmatched input"));        
     }
 
     #[test]
