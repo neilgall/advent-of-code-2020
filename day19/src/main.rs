@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::iter::{empty, once};
 use parser::*;
 
 // --- model
@@ -17,36 +18,39 @@ struct Rules {
     rules: HashMap<RuleID, Rule>
 }
 
-type MatchResult<'a> = Vec<&'a str>;
+type MatchResult<'a> = Box<dyn Iterator<Item = &'a str> + 'a>;
 
 impl Rules {
     fn get(&self, id: &RuleID) -> &Rule {
         self.rules.get(id).unwrap()
     }
 
-    fn match_seq_tail_recursive<'a>(&self, seq: &[RuleID], input: &'a str) -> MatchResult<'a> {
-        let mut results = self.match_seq_non_recursive(seq, input);
-        let mut remaining = &results[..];
+    fn match_seq_tail_recursive<'a>(&'a self, seq: &'a [RuleID], input: &'a str) -> MatchResult<'a> {
+        let mut remaining: Vec<&str> = self.match_seq_non_recursive(seq, input).collect();
+        let mut results: MatchResult<'a> = Box::new(empty());
         while !remaining.is_empty() {
-            let mut new_results = remaining.iter().flat_map(|r|
+            let next_remaining = remaining.iter().flat_map(|r|
                 self.match_seq_non_recursive(seq, r)
             ).collect();
-            let from = results.len();
-            results.append(&mut new_results);
-            remaining = &results[from..];
+
+            results = Box::new(results.chain(remaining.into_iter()));
+            remaining = next_remaining;
         }
-        results        
+        results
     }
 
-    fn match_seq_non_recursive<'a>(&self, seq: &[RuleID], input: &'a str) -> MatchResult<'a> {
-        seq.iter().fold(vec![input], |remainings, rule| {
-            remainings.iter().flat_map(|remaining|
-                self.match_rule(rule, remaining)
-            ).collect()
-        })        
+    fn match_seq_non_recursive<'a>(&'a self, seq: &'a [RuleID], input: &'a str) -> MatchResult<'a> {
+        seq.iter().fold(
+            Box::new(once(input)),
+            |remainings, rule| {
+                Box::new(remainings.flat_map(move |remaining|
+                    self.match_rule(rule, remaining)
+                ))
+            }
+        )
     }
 
-    fn match_seq<'a>(&self, id: &RuleID, seq: &[RuleID], input: &'a str) -> MatchResult<'a> {
+    fn match_seq<'a>(&'a self, id: &RuleID, seq: &'a [RuleID], input: &'a str) -> MatchResult<'a> {
         if seq.last() == Some(id) {
             self.match_seq_tail_recursive(&seq[0..seq.len()-1], input)
         } else {
@@ -54,13 +58,13 @@ impl Rules {
         }
     }
 
-    fn match_rule<'a>(&self, id: &RuleID, input: &'a str) -> MatchResult<'a> {
+    fn match_rule<'a>(&'a self, id: &RuleID, input: &'a str) -> MatchResult<'a> {
         match self.get(id) {
             Rule::MatchChar(c) => {
                 if input.chars().next() == Some(*c) {
-                    vec![&input[c.len_utf8()..]]
+                    Box::new(once(&input[c.len_utf8()..]))
                 } else {
-                    vec![]
+                    Box::new(empty())
                 }
             }
 
@@ -69,9 +73,9 @@ impl Rules {
             }
 
             Rule::Alternative(xs, ys) => {
-                let r = self.match_seq(id, xs, input);
-                if !r.is_empty() {
-                    r
+                let mut r = self.match_seq(id, xs, input).peekable();
+                if r.peek().is_some() {
+                    Box::new(r)
                 } else {
                     self.match_seq(id, ys, input)
                 }
@@ -80,8 +84,8 @@ impl Rules {
     }
 
     fn match_all<'a>(&self, input: &'a str) -> Result<(), &'a str> {
-        let r = self.match_rule(&0, input);
-        match r.iter().next() {
+        let mut r = self.match_rule(&0, input);
+        match r.next() {
             None => Err("no match"),
             Some(s) if s.is_empty() => Ok(()),
             _ => Err("extra unmatched input")
@@ -240,23 +244,25 @@ aabbbbbaabbbaaaaaabbbbbababaaaaabbaaabba".lines()
         assert_eq!(rules, Ok(("", sample_rules())));
     }
 
-    fn no_match() -> Vec<&'static str> {
-        vec![]
-    }
-
     #[test]
     fn test_matcher_success() {
         let rules = sample_rules();
-        assert_eq!(rules.match_rule(&0, "ababbb"), vec![""]);
-        assert_eq!(rules.match_rule(&0, "abbbab"), vec![""]);
-        assert_eq!(rules.match_rule(&0, "aaaabbb"), vec![("b")]);
+        
+        let result: Vec<&str> = rules.match_rule(&0, "ababbb").collect();
+        assert_eq!(result, vec![""]);
+
+        let result: Vec<&str> = rules.match_rule(&0, "abbbab").collect();
+        assert_eq!(result, vec![""]);
+
+        let result: Vec<&str> = rules.match_rule(&0, "aaaabbb").collect();
+        assert_eq!(result, vec![("b")]);
     }
 
     #[test]
     fn test_matcher_failure() {
         let rules = sample_rules();
-        assert_eq!(rules.match_rule(&0, "bababa"), no_match());
-        assert_eq!(rules.match_rule(&0, "aaabbb"), no_match());
+        assert_eq!(rules.match_rule(&0, "bababa").next(), None);
+        assert_eq!(rules.match_rule(&0, "aaabbb").next(), None);
     }
 
     #[test]
