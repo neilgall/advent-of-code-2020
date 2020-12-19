@@ -24,16 +24,17 @@ impl Rules {
 
     fn match_seq<'a>(&self, id: &usize, seq: &[usize], input: &'a str) -> MatchResult<'a> {
         if seq.last() == Some(id) {
-            // tail recursive
+            // tail recursive - perform all non-greedy matches
             let init = &seq[0..seq.len()-1];
-            let mut remaining = self.match_seq(id, init, input);
-            let mut results = remaining.to_vec();
+            let mut results = self.match_seq(id, init, input);
+            let mut remaining = &results[..];
             while !remaining.is_empty() {
-                let mut new_results: Vec<&'a str> = remaining.iter().flat_map(|r|
+                let mut new_results = remaining.iter().flat_map(|r|
                     self.match_seq(id, init, r)
                 ).collect();
-                remaining = new_results.to_vec();
+                let from = results.len();
                 results.append(&mut new_results);
+                remaining = &results[from..];
             }
             results
         } else {
