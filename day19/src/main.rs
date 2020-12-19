@@ -3,50 +3,58 @@ use parser::*;
 
 // --- model
 
+type RuleID = usize;
+
 #[derive(Debug, Clone, PartialEq)]
 enum Rule {
     MatchChar(char),
-    Sequence(Vec<usize>),
-    Alternative(Vec<usize>, Vec<usize>)
+    Sequence(Vec<RuleID>),
+    Alternative(Vec<RuleID>, Vec<RuleID>)
 }
 
 #[derive(Debug, PartialEq)]
 struct Rules {
-    rules: HashMap<usize, Rule>
+    rules: HashMap<RuleID, Rule>
 }
 
 type MatchResult<'a> = Vec<&'a str>;
 
 impl Rules {
-    fn get(&self, id: &usize) -> &Rule {
+    fn get(&self, id: &RuleID) -> &Rule {
         self.rules.get(id).unwrap()
     }
 
-    fn match_seq<'a>(&self, id: &usize, seq: &[usize], input: &'a str) -> MatchResult<'a> {
+    fn match_seq_tail_recursive<'a>(&self, seq: &[RuleID], input: &'a str) -> MatchResult<'a> {
+        let mut results = self.match_seq_non_recursive(seq, input);
+        let mut remaining = &results[..];
+        while !remaining.is_empty() {
+            let mut new_results = remaining.iter().flat_map(|r|
+                self.match_seq_non_recursive(seq, r)
+            ).collect();
+            let from = results.len();
+            results.append(&mut new_results);
+            remaining = &results[from..];
+        }
+        results        
+    }
+
+    fn match_seq_non_recursive<'a>(&self, seq: &[RuleID], input: &'a str) -> MatchResult<'a> {
+        seq.iter().fold(vec![input], |remainings, rule| {
+            remainings.iter().flat_map(|remaining|
+                self.match_rule(rule, remaining)
+            ).collect()
+        })        
+    }
+
+    fn match_seq<'a>(&self, id: &RuleID, seq: &[RuleID], input: &'a str) -> MatchResult<'a> {
         if seq.last() == Some(id) {
-            // tail recursive - perform all non-greedy matches
-            let init = &seq[0..seq.len()-1];
-            let mut results = self.match_seq(id, init, input);
-            let mut remaining = &results[..];
-            while !remaining.is_empty() {
-                let mut new_results = remaining.iter().flat_map(|r|
-                    self.match_seq(id, init, r)
-                ).collect();
-                let from = results.len();
-                results.append(&mut new_results);
-                remaining = &results[from..];
-            }
-            results
+            self.match_seq_tail_recursive(&seq[0..seq.len()-1], input)
         } else {
-            seq.iter().fold(vec![input], |remainings, rule| {
-                remainings.iter().flat_map(|remaining|
-                    self.match_rule(rule, remaining)
-                ).collect()
-            })
+            self.match_seq_non_recursive(seq, input)
         }
     }
 
-    fn match_rule<'a>(&self, id: &usize, input: &'a str) -> MatchResult<'a> {
+    fn match_rule<'a>(&self, id: &RuleID, input: &'a str) -> MatchResult<'a> {
         match self.get(id) {
             Rule::MatchChar(c) => {
                 if input.chars().next() == Some(*c) {
@@ -90,7 +98,7 @@ impl Rules {
 // --- parser
 
 fn parse_rules(input: &str) -> ParseResult<Rules> {
-    let rule_id = integer.map(|i| i as usize);
+    let rule_id = integer.map(|i| i as RuleID);
     let space = match_literal(" ");
     
     let match_char = any_char
