@@ -15,75 +15,33 @@ struct Rules {
     rules: HashMap<usize, Rule>
 }
 
-type MatchResult<'a> = Result<&'a str, &'a str>;
+type MatchResult<'a> = Vec<&'a str>;
 
 impl Rules {
     fn get(&self, id: &usize) -> &Rule {
         self.rules.get(id).unwrap()
     }
 
-    fn is_tailrec(&self, rule_id: &usize) -> bool {
-        match self.get(rule_id) {
-            Rule::Sequence(rs) => rs.last() == Some(rule_id),
-            Rule::Alternative(xs, ys) => xs.last() == Some(rule_id) || ys.last() == Some(rule_id),
-            _ => false
-        }
-    }
-
-    fn match_seq<'a>(&self, seq: &[usize], input: &'a str) -> MatchResult<'a> {
-        let mut remainings: Vec<&'a str> = vec![input];
-        for rule in seq {
-            if remainings.is_empty() {
-                break;
-            }
-            if self.is_tailrec(rule) {
-                remainings = remainings.iter().flat_map(|remaining|
-                    self.match_tailrec_rule(rule, remaining)
-                ).collect();
-            } else {
-                remainings = remainings.iter().filter_map(|remaining|
-                    self.match_rule(rule, remaining).ok()
-                ).collect();
-            }
-        }
-        
-        remainings.into_iter().next().ok_or(input)
-    }
-
-    fn match_seq_tailrec<'a>(&self, id: &usize, seq: &[usize], input: &'a str) -> Vec<&'a str> {
-        if seq.last() != Some(id) {
-            self.match_seq(seq, input).map(|r| vec![r]).unwrap_or(vec![])
-        } else {
+    fn match_seq<'a>(&self, id: &usize, seq: &[usize], input: &'a str) -> MatchResult<'a> {
+        if seq.last() == Some(id) {
+            // tail recursive
             let init = &seq[0..seq.len()-1];
-            if let Ok(mut remaining) = self.match_seq(init, input) {
-                let mut results = vec![remaining];
-                while let Ok(next_remaining) = self.match_seq(init, remaining) {
-                    results.push(next_remaining);
-                    remaining = next_remaining;
-                }
-                results
-            } else {
-                vec![]
+            let mut remaining = self.match_seq(id, init, input);
+            let mut results = remaining.to_vec();
+            while !remaining.is_empty() {
+                let mut new_results: Vec<&'a str> = remaining.iter().flat_map(|r|
+                    self.match_seq(id, init, r)
+                ).collect();
+                remaining = new_results.to_vec();
+                results.append(&mut new_results);
             }
-        }
-    }
-
-    fn match_tailrec_rule<'a>(&self, id: &usize, input: &'a str) -> Vec<&'a str> {
-        match self.get(id) {
-            Rule::Sequence(rs) => {
-                self.match_seq_tailrec(id, rs, input)
-            }
-
-            Rule::Alternative(xs, ys) => {
-                let r = self.match_seq_tailrec(id, xs, input);
-                if !r.is_empty() {
-                    r
-                } else {
-                    self.match_seq_tailrec(id, ys, input)
-                }
-            }
-
-            _ => panic!("match_tailrec_rule() with rule that cannot be tailrec")
+            results
+        } else {
+            seq.iter().fold(vec![input], |remainings, rule| {
+                remainings.iter().flat_map(|remaining|
+                    self.match_rule(rule, remaining)
+                ).collect()
+            })
         }
     }
 
@@ -91,31 +49,34 @@ impl Rules {
         match self.get(id) {
             Rule::MatchChar(c) => {
                 if input.chars().next() == Some(*c) {
-                    Ok(&input[c.len_utf8()..])
+                    vec![&input[c.len_utf8()..]]
                 } else {
-                    Err(input)
+                    vec![]
                 }
             }
 
             Rule::Sequence(rs) => {
-                self.match_seq(rs, input)
+                self.match_seq(id, rs, input)
             }
 
             Rule::Alternative(xs, ys) => {
-                self.match_seq(xs, input)
-                    .or_else(|_| self.match_seq(ys, input))
+                let r = self.match_seq(id, xs, input);
+                if !r.is_empty() {
+                    r
+                } else {
+                    self.match_seq(id, ys, input)
+                }
             }
         }
     }
 
     fn match_all<'a>(&self, input: &'a str) -> Result<(), &'a str> {
-        self.match_rule(&0, input)
-            .and_then(|remaining| if remaining.is_empty() {
-                Ok(())
-            } else {
-                Err(remaining)
-            }
-        )
+        let r = self.match_rule(&0, input);
+        if r.is_empty() || !r.iter().next().unwrap().is_empty() {
+            Err(input)
+        } else {
+            Ok(())
+        }
     }
 
     fn apply_modification(&mut self) {
@@ -270,26 +231,30 @@ aabbbbbaabbbaaaaaabbbbbababaaaaabbaaabba".lines()
         assert_eq!(rules, Ok(("", sample_rules())));
     }
 
+    fn no_match() -> Vec<&'static str> {
+        vec![]
+    }
+
     #[test]
     fn test_matcher_success() {
         let rules = sample_rules();
-        assert_eq!(rules.match_rule(&0, "ababbb"), Ok(""));
-        assert_eq!(rules.match_rule(&0, "abbbab"), Ok(""));
-        assert_eq!(rules.match_rule(&0, "aaaabbb"), Ok("b"));
+        assert_eq!(rules.match_rule(&0, "ababbb"), vec![""]);
+        assert_eq!(rules.match_rule(&0, "abbbab"), vec![""]);
+        assert_eq!(rules.match_rule(&0, "aaaabbb"), vec![("b")]);
     }
 
     #[test]
     fn test_matcher_failure() {
         let rules = sample_rules();
-        assert_eq!(rules.match_rule(&0, "bababa"), Err("bababa"));
-        assert_eq!(rules.match_rule(&0, "aaabbb"), Err("aaabbb"));
+        assert_eq!(rules.match_rule(&0, "bababa"), no_match());
+        assert_eq!(rules.match_rule(&0, "aaabbb"), no_match());
     }
 
     #[test]
     fn test_match_all() {
         let rules = sample_rules();
         assert_eq!(rules.match_all("abbbab"), Ok(()));
-        assert_eq!(rules.match_all("aaaabbb"), Err("b"));        
+        assert_eq!(rules.match_all("aaaabbb"), Err("aaaabbb"));        
     }
 
     #[test]
@@ -297,13 +262,6 @@ aabbbbbaabbbaaaaaabbbbbababaaaaabbaaabba".lines()
         let rules = part2_sample_rules();
         let messages = part2_input();
         assert_eq!(messages.filter_map(|m| rules.match_all(m).ok()).count(), 3);
-    }
-
-    #[test]
-    fn test_is_tailrec() {
-        assert_eq!(part2_sample_rules_modified().is_tailrec(&8), true);
-        assert_eq!(part2_sample_rules_modified().is_tailrec(&11), false);
-        assert_eq!(part2_sample_rules_modified().is_tailrec(&3), false);
     }
 
     #[test]
