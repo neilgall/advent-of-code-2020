@@ -2,7 +2,7 @@
 extern crate lazy_static;
 
 use log::{debug, info};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -15,80 +15,6 @@ type EdgePattern = u64;
 
 trait Reversible {
     fn reversed(self) -> Self;
-}
-
-#[derive(Debug)]
-struct Tile {
-    id: TileID,
-    top: EdgePattern,
-    left: EdgePattern,
-    right: EdgePattern,
-    bottom: EdgePattern
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone, EnumIter)]
-enum Orientation {
-    R0,
-    R90,
-    R180,
-    R270,
-    R0FlipH,
-    R0FlipV,
-    R90FlipH,
-    R90FlipV
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-struct Pos {
-    x: usize,
-    y: usize
-}
-
-#[derive(Debug, Eq, PartialEq)]
-enum TilePlacement<'a> {
-    None,
-    Placed {
-        orientation: Orientation,
-        tile: &'a Tile
-    }
-}
-
-struct Arrangement<'a> {
-    width: usize,
-    height: usize,
-    fixed_tiles: [[TilePlacement<'a>; 12]; 12],
-    available_tiles: HashMap<TileID, &'a Tile>,
-}
-
-#[derive(Debug)]
-struct Constraint {
-    top: Option<EdgePattern>,
-    bottom: Option<EdgePattern>,
-    left: Option<EdgePattern>,
-    right: Option<EdgePattern>
-}
-
-impl Eq for Tile {}
-
-impl PartialEq for Tile {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl<'a> Default for TilePlacement<'a> {
-    fn default() -> Self { TilePlacement::None }
-}
-
-impl Default for Constraint {
-    fn default() -> Self {
-        Constraint {
-            top: None,
-            bottom: None,
-            left: None,
-            right: None
-        }
-    }
 }
 
 lazy_static! {
@@ -110,6 +36,41 @@ lazy_static! {
 impl Reversible for EdgePattern {
     fn reversed(self) -> Self {
         REVERSE_EDGE_PATTERNS[self as usize]
+    }
+}
+
+#[derive(Debug)]
+struct Tile {
+    id: TileID,
+    top: EdgePattern,
+    left: EdgePattern,
+    right: EdgePattern,
+    bottom: EdgePattern
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone, EnumIter, Hash)]
+enum Orientation {
+    R0,
+    R90,
+    R180,
+    R270,
+    R0FlipH,
+    R0FlipV,
+    R90FlipH,
+    R90FlipV
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
+struct OrientedTile {
+    tile_id: TileID,
+    orientation: Orientation
+}
+
+impl Eq for Tile {}
+
+impl PartialEq for Tile {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
@@ -167,19 +128,166 @@ impl Tile {
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
+enum Relationship {
+    Above,
+    Below,
+    LeftOf,
+    RightOf
+}
+
+#[derive(Debug)]
+struct AllowedOrientedTiles {
+    neighbours: HashMap<(TileID, Orientation, Relationship), HashSet<OrientedTile>>,
+    empty: HashSet<OrientedTile>
+}
+
+impl AllowedOrientedTiles {
+    fn new(tiles: &Vec<&Tile>) -> Self {
+        let mut allowed = HashMap::new();
+        for tile in tiles.iter() {
+            for orientation in Orientation::iter() {
+                let mut above = HashSet::new();
+                let mut below = HashSet::new();
+                let mut left_of = HashSet::new();
+                let mut right_of = HashSet::new();
+
+                for candidate in tiles.iter().filter(|t| t.id != tile.id) {
+                    for candidate_orientation in Orientation::iter() {
+                        if candidate.bottom_edge_in_orientation(candidate_orientation) == tile.top_edge_in_orientation(orientation) {
+                            above.insert(OrientedTile { tile_id: candidate.id, orientation: candidate_orientation });
+                        }
+                        if candidate.top_edge_in_orientation(candidate_orientation) == tile.bottom_edge_in_orientation(orientation) {
+                            below.insert(OrientedTile { tile_id: candidate.id, orientation: candidate_orientation });
+                        }
+                        if candidate.left_edge_in_orientation(candidate_orientation) == tile.right_edge_in_orientation(orientation) {
+                            right_of.insert(OrientedTile { tile_id: candidate.id, orientation: candidate_orientation });
+                        }
+                        if candidate.right_edge_in_orientation(candidate_orientation) == tile.left_edge_in_orientation(orientation) {
+                            left_of.insert(OrientedTile { tile_id: candidate.id, orientation: candidate_orientation });
+                        }
+                    }
+                }
+
+                allowed.insert((tile.id, orientation, Relationship::Above), above);
+                allowed.insert((tile.id, orientation, Relationship::Below), below);
+                allowed.insert((tile.id, orientation, Relationship::LeftOf), left_of);
+                allowed.insert((tile.id, orientation, Relationship::RightOf), right_of);
+            }
+        }
+
+        AllowedOrientedTiles {
+            neighbours: allowed,
+            empty: HashSet::new()
+        }
+    }
+
+    fn get(&self, tile_id: TileID, orientation: Orientation, relationship: Relationship) -> &'_ HashSet<OrientedTile> {
+        self.neighbours.get(&(tile_id, orientation, relationship)).unwrap_or(&self.empty)
+    }
+} 
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
+struct Pos {
+    x: i64,
+    y: i64
+}
+
+impl Pos {
+    fn up(&self) -> Pos {
+        Pos { x: self.x, y: self.y - 1 }
+    }
+
+    fn down(&self) -> Pos {
+        Pos { x: self.x, y: self. y + 1 }
+    }
+
+    fn left(&self) -> Pos {
+        Pos { x: self.x - 1, y: self.y }
+    }
+
+    fn right(&self) -> Pos {
+        Pos { x: self.x + 1, y: self.y }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum TilePlacement<'a> {
+    None,
+    Placed {
+        orientation: Orientation,
+        tile: &'a Tile
+    }
+}
+
+impl<'a> Default for TilePlacement<'a> {
+    fn default() -> Self { TilePlacement::None }
+}
+
+struct OrientedTileSet {
+    initialised: bool,
+    oriented_tiles: HashSet<OrientedTile>
+}
+
+impl OrientedTileSet {
+    fn new() -> Self {
+        OrientedTileSet {
+            initialised: false,
+            oriented_tiles: HashSet::new()
+        }
+    }
+
+    fn restrict_to(&mut self, neighbours: &HashSet<OrientedTile>) {
+        if self.initialised {
+            self.oriented_tiles = self.oriented_tiles.intersection(neighbours).cloned().collect();
+        } else {
+            self.oriented_tiles = neighbours.clone();
+            self.initialised = true;
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.initialised && self.oriented_tiles.is_empty()
+    }
+}
+
+#[derive(Debug)]
+enum SearchResult<T> {
+    Empty,
+    Found(T),
+    InvalidPlacement(TileID)
+}
+
+struct Arrangement<'a> {
+    width: i64,
+    height: i64,
+    allowed_neighbours: &'a AllowedOrientedTiles,
+    fixed_tiles: [[TilePlacement<'a>; 12]; 12],
+    available_tiles: HashMap<TileID, &'a Tile>,
+    empty_positions: HashSet<Pos>
+}
+
+
 impl<'a> Arrangement<'a> {
-    fn new(width: usize, height: usize, tiles: &[&'a Tile]) -> Self {
+    fn new(width: i64, height: i64, tiles: &[&'a Tile], allowed_neighbours: &'a AllowedOrientedTiles) -> Self {
+        let empty_positions = (0..height).flat_map(move |y|
+            (0..width).map(move |x| Pos { x, y })
+        ).collect();
+
         Arrangement {
             width,
             height,
+            allowed_neighbours,
             fixed_tiles: Default::default(),
-            available_tiles: tiles.iter().map(|tile| (tile.id, *tile)).collect()
+            available_tiles: tiles.iter().map(|tile| (tile.id, *tile)).collect(),
+            empty_positions
         }
     }
 
     fn place(&mut self, pos: &Pos, orientation: Orientation, tile_id: TileID) {
         if let Some(tile) = self.available_tiles.remove(&tile_id) {
-            self.fixed_tiles[pos.y][pos.x] = TilePlacement::Placed { orientation, tile };
+            self.fixed_tiles[pos.y as usize][pos.x as usize] = TilePlacement::Placed { orientation, tile };
+            self.empty_positions.remove(pos);
             debug!("place {} {:?} at {:?}", tile_id, orientation, pos);
             debug!("{:?}", self);
         } else {
@@ -188,129 +296,113 @@ impl<'a> Arrangement<'a> {
     }
 
     fn remove(&mut self, pos: &Pos) {
-        match self.fixed_tiles[pos.y][pos.x] {
+        match self.fixed_tiles[pos.y as usize][pos.x as usize] {
             TilePlacement::None => {},
             TilePlacement::Placed { orientation: _, tile } => {
                 self.available_tiles.insert(tile.id, tile);
-                self.fixed_tiles[pos.y][pos.x] = TilePlacement::None;
+                self.fixed_tiles[pos.y as usize][pos.x as usize] = TilePlacement::None;
+                self.empty_positions.insert(*pos);
                 debug!("remove {} from {:?}", tile.id, pos);
                 debug!("{:?}", self);
             }
         }
     }
 
+    fn tile_at(&self, pos: &Pos) -> &'a TilePlacement {
+        if 0 <= pos.x && 0 <= pos.y && pos.x < self.width && pos.y < self.height {
+            &self.fixed_tiles[pos.y as usize][pos.x as usize]
+        } else {
+            &TilePlacement::None
+        }
+    }
+
     fn tile_id_at(&self, pos: &Pos) -> Option<TileID> {
-        match self.fixed_tiles[pos.y][pos.x] {
+        match self.tile_at(pos) {
             TilePlacement::None => None,
             TilePlacement::Placed { orientation: _, tile } => Some(tile.id)
         }
     }
 
-    fn has_placed_neighbour(&self, x: usize, y: usize) -> bool {
-        (x > 0 && self.fixed_tiles[y][x-1] != TilePlacement::None)
-            || (y > 0 && self.fixed_tiles[y-1][x] != TilePlacement::None)
-            || (x < self.width-1 && self.fixed_tiles[y][x+1] != TilePlacement::None)
-            || (y < self.height-1 && self.fixed_tiles[y+1][x] != TilePlacement::None)
-    }  
+    fn possible_orientations(&self, pos: &Pos) -> SearchResult<HashSet<OrientedTile>> {
+        let mut possible = OrientedTileSet::new();
 
-    fn placement_positions(&self) -> impl Iterator<Item = Pos> + '_ {
-        (0..self.width).flat_map(move |y|
-            (0..self.height).filter_map(move |x|
-                if self.fixed_tiles[y][x] == TilePlacement::None && self.has_placed_neighbour(x, y) {
-                    Some(Pos { x, y })
-                } else {
-                    None
-                }
-            )
-        )
-    }
+        if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.left()) {
+            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::RightOf));
+        }
 
-    fn constraints_at_position(&self, pos: &Pos) -> Constraint {
-        use TilePlacement::*;
-
-        let mut constraints = Constraint::default();
-
-        if pos.y > 0 {
-            if let Placed { orientation, tile } = self.fixed_tiles[pos.y-1][pos.x] {
-                constraints.top = Some(tile.bottom_edge_in_orientation(orientation));
+        if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.up()) {
+            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::Below));
+            if possible.is_empty() {
+                debug!("invalid tile {:?} above {:?}", tile.id, pos);
+                return SearchResult::InvalidPlacement(tile.id);
             }
         }
-        if pos.x > 0 {
-            if let Placed { orientation, tile } = self.fixed_tiles[pos.y][pos.x-1] {
-                constraints.left = Some(tile.right_edge_in_orientation(orientation));
-            }
-        }
-        if pos.y < self.width - 1 {
-            if let Placed { orientation, tile } = self.fixed_tiles[pos.y+1][pos.x] {
-                constraints.bottom = Some(tile.top_edge_in_orientation(orientation));
-            }
-        }
-        if pos.x < self.height - 1 {
-            if let Placed { orientation, tile } = self.fixed_tiles[pos.y][pos.x+1] {
-                constraints.right = Some(tile.left_edge_in_orientation(orientation));
-            }
-        }
-        constraints
-    }
 
-    fn can_place(&self, tile_id: TileID, pos: &Pos, orientation: Orientation) -> bool {
-        if let Some(tile) = self.available_tiles.get(&tile_id) {
-            let constraints = self.constraints_at_position(pos);
-            if let Some(top) = constraints.top {
-                if tile.top_edge_in_orientation(orientation) != top {
-                    debug!("can't place {} {:?} at {:?}, top={:x} must be {:x}", tile_id, orientation, pos, tile.top_edge_in_orientation(orientation), top);
-                    return false;
-                }
+        if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.right()) {
+            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::LeftOf));
+            if possible.is_empty() {
+                debug!("invalid tile {:?} right of {:?}", tile.id, pos);
+                return SearchResult::InvalidPlacement(tile.id);
             }
-            if let Some(bottom) = constraints.bottom {
-                if tile.bottom_edge_in_orientation(orientation) != bottom {
-                    debug!("can't place {} {:?} at {:?}, bottom={:x} must be {:x}", tile_id, orientation, pos, tile.bottom_edge_in_orientation(orientation), bottom);
-                    return false;
-                }
+        }
+
+        if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.down()) {
+            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::Above));
+            if possible.is_empty() {
+                debug!("invalid tile {:?} below {:?}", tile.id, pos);
+                return SearchResult::InvalidPlacement(tile.id);
             }
-            if let Some(left) = constraints.left {
-                if tile.left_edge_in_orientation(orientation) != left {
-                    debug!("can't place {} {:?} at {:?}, left={:x} must be {:x}", tile_id, orientation, pos, tile.left_edge_in_orientation(orientation), left);
-                    return false;
-                }
-            }
-            if let Some(right) = constraints.right {
-                if tile.right_edge_in_orientation(orientation) != right {
-                    debug!("can't place {} {:?} at {:?}, top={:x} must be {:x}", tile_id, orientation, pos, tile.right_edge_in_orientation(orientation), right);
-                    return false;
-                }
-            }
-            true
+        }
+
+        if possible.initialised {
+            SearchResult::Found(possible.oriented_tiles)
         } else {
-            false
+            SearchResult::Empty
         }
+    } 
+
+    fn possible_placements(&self) -> SearchResult<Vec<(Pos, HashSet<OrientedTile>)>> {
+        let mut placements = vec![];
+        for pos in self.empty_positions.iter() {
+            let search = self.possible_orientations(pos);
+            // debug!("possible placements {:?} {:?}", pos, search);
+            match search {
+                SearchResult::Empty => {},
+                SearchResult::Found(tile_set) => placements.push((*pos, tile_set)),
+                SearchResult::InvalidPlacement(tile_id) => return SearchResult::InvalidPlacement(tile_id)
+           }
+        }
+        SearchResult::Found(placements)
     }
 
-    fn try_arrange(&mut self) -> bool {
+    fn try_arrange(&mut self) -> SearchResult<()> {
         if self.available_tiles.is_empty() {
-            true
+            SearchResult::Found(())
         } else {
-            let positions: Vec<Pos> = self.placement_positions().collect();
-            debug!("available positions {:?}", &positions);
-
-            let available_ids: Vec<TileID> = self.available_tiles.values().map(|tile| tile.id).collect();
-            available_ids.into_iter().find(|tile_id| {
-                Orientation::iter().find(|orientation| {
-                    positions.iter().find(|position| 
-                        if !self.can_place(*tile_id, position, *orientation) {
-                            false
-                        } else {
-                            self.place(position, *orientation, *tile_id);
-                            if self.try_arrange() {
-                                true
-                            } else {
-                                self.remove(position);
-                                false
+            match self.possible_placements() {
+                SearchResult::Empty => SearchResult::Empty,
+                SearchResult::InvalidPlacement(tile_id) => SearchResult::InvalidPlacement(tile_id),
+                SearchResult::Found(placements) => {
+                    for (position, oriented_tiles) in placements.iter() {
+                        for tile in oriented_tiles.iter() {
+                            self.place(position, tile.orientation, tile.tile_id);
+                            match self.try_arrange() {
+                                SearchResult::InvalidPlacement(tile_id) if tile_id != tile.tile_id => {
+                                    self.remove(position);
+                                    return SearchResult::InvalidPlacement(tile_id);
+                                }
+                                SearchResult::Found(_) => {
+                                    return SearchResult::Found(());
+                                }
+                                SearchResult::Empty | SearchResult::InvalidPlacement(_) => {
+                                    self.remove(position);
+                                }
                             }
                         }
-                    ).is_some()
-                }).is_some()
-            }).is_some()
+                    }
+                    SearchResult::Empty
+                }
+            }
         }
     }
 }
@@ -318,28 +410,27 @@ impl<'a> Arrangement<'a> {
 impl<'a> fmt::Debug for Arrangement<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for y in 0..self.height {
+            write!(f, "\n")?;
             for x in 0..self.width {
-                match self.fixed_tiles[y][x] {
+                match self.tile_at(&Pos { x, y }) {
                     TilePlacement::None => write!(f, "---- ")?,
                     TilePlacement::Placed { orientation: _, tile } => write!(f, "{:4} ", tile.id)?
                 }
             }
-            write!(f, "\n")?;
         };
         Ok(())
     }
 }
 
-fn arrange_tiles<'a>(width: usize, height: usize, tiles: &Vec<&'a Tile>) -> Option<Arrangement<'a>> {
+fn arrange_tiles<'a>(width: i64, height: i64, tiles: &Vec<&'a Tile>, neighbours: &'a AllowedOrientedTiles) -> Option<Arrangement<'a>> {
     tiles.iter().filter_map(|tile|
         Orientation::iter().filter_map(|orientation| {
             info!("trying {} {:?} in start position", tile.id, orientation);
-            let mut arrangement = Arrangement::new(width, height, tiles);
+            let mut arrangement = Arrangement::new(width, height, tiles, &neighbours);
             arrangement.place(&Pos { x: 0, y: 0 }, orientation, tile.id);
-            if arrangement.try_arrange() {
-                Some(arrangement)
-            } else {
-                None
+            match arrangement.try_arrange() {
+                SearchResult::Found(()) => Some(arrangement),
+                _ => None
             }
         }).next()
     ).next()
@@ -389,7 +480,9 @@ fn part1(tiles: &Vec<&Tile>) -> Option<usize> {
         Pos { x: 11, y: 11 }
     ];
 
-    arrange_tiles(12, 12, tiles).map(|arrangement|
+    let allowed_neighbours = AllowedOrientedTiles::new(tiles);
+
+    arrange_tiles(12, 12, tiles, &allowed_neighbours).map(|arrangement|
         corners.iter().filter_map(|c| arrangement.tile_id_at(c)).product()
     )
 }
@@ -405,6 +498,10 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn init_logging() {
+         let _ = env_logger::builder().is_test(true).try_init();
+    }
 
     fn example_input() -> String {
         std::fs::read_to_string("./example.txt").unwrap()
@@ -467,77 +564,47 @@ mod tests {
     }
 
     #[test]
-    fn test_placement_positions() {
+    fn test_allowed_neighbours() {
+        use Orientation::*;
+        use Relationship::*;
+
         let tiles = example_tiles();
         let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
-        let mut arrangement = Arrangement::new(3, 3, &tiles_by_ref);
-        arrangement.place(&Pos { x: 0, y: 0 }, Orientation::R0, 2311);
-        let positions: Vec<Pos> = arrangement.placement_positions().collect();
-        assert_eq!(positions.len(), 2);
-        assert!(positions.contains(&Pos { x: 1, y: 0 }));
-        assert!(positions.contains(&Pos { x: 0, y: 1 }));
+        let allowed_neighbours = AllowedOrientedTiles::new(&tiles_by_ref);
+
+        assert!(allowed_neighbours.get(1951, R0FlipV, Below).contains(&OrientedTile { tile_id: 2729, orientation: R0FlipV }));
+        assert!(allowed_neighbours.get(1951, R0FlipV, RightOf).contains(&OrientedTile { tile_id: 2311, orientation: R0FlipV }));
+        assert!(allowed_neighbours.get(2729, R0FlipV, Below).contains(&OrientedTile { tile_id: 2971, orientation: R0FlipV }));
+        assert!(allowed_neighbours.get(2311, R0FlipV, RightOf).contains(&OrientedTile { tile_id: 3079, orientation: R0 }));
     }
 
     #[test]
-    fn test_constraints_r0() {
+    fn test_possible_placements() {
         let tiles = example_tiles();
         let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
-        let mut arrangement = Arrangement::new(3, 3, &tiles_by_ref);
-        arrangement.place(&Pos { x: 0, y: 0 }, Orientation::R0, 2311);
-
-        let constraints = arrangement.constraints_at_position(&Pos { x: 1, y: 0 });
-        assert_eq!(constraints.top, None);
-        assert_eq!(constraints.bottom, None);
-        assert_eq!(constraints.right, None);
-        assert_eq!(constraints.left, Some(0x059));
-    }
-
-    #[test]
-    fn test_constraints_r180() {
-        let tiles = example_tiles();
-        let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
-        let mut arrangement = Arrangement::new(3, 3, &tiles_by_ref);
-
-        arrangement.place(&Pos { x: 0, y: 0 }, Orientation::R180, 1951);
-        let constraints = arrangement.constraints_at_position(&Pos { x: 1, y: 0 });
-        assert_eq!(constraints.top, None);
-        assert_eq!(constraints.bottom, None);
-        assert_eq!(constraints.right, None);
-        assert_eq!(constraints.left, Some(0x24b));
-
-        let constraints = arrangement.constraints_at_position(&Pos { x: 0, y: 1 });
-        assert_eq!(constraints.top, Some(0x18d));
-        assert_eq!(constraints.bottom, None);
-        assert_eq!(constraints.right, None);
-        assert_eq!(constraints.left, None);
-
-        arrangement.place(&Pos { x: 1, y: 0 }, Orientation::R180, 2311);
-        let constraints = arrangement.constraints_at_position(&Pos { x: 2, y: 0 });
-        assert_eq!(constraints.top, None);
-        assert_eq!(constraints.bottom, None);
-        assert_eq!(constraints.right, None);
-        assert_eq!(constraints.left, Some(0x13e));
-    }
-
-    #[test]
-    fn test_can_place() {
-        let tiles = example_tiles();
-        let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
-        let mut arrangement = Arrangement::new(3, 3, &tiles_by_ref);
-
+        let allowed_neighbours = AllowedOrientedTiles::new(&tiles_by_ref);
+        let mut arrangement = Arrangement::new(3, 3, &tiles_by_ref, &allowed_neighbours);
         arrangement.place(&Pos { x: 0, y: 0 }, Orientation::R0FlipV, 1951);
-        let constraints = arrangement.constraints_at_position(&Pos { x: 1, y: 0 });
-        assert_eq!(constraints.top, None);
-        assert_eq!(constraints.bottom, None);
-        assert_eq!(constraints.right, None);
-        assert_eq!(constraints.left, Some(0x13e));
+        match arrangement.possible_placements() {
+            SearchResult::InvalidPlacement(_) => panic!("invalid placement"),
+            SearchResult::Empty => panic!("nothing found"),
+            SearchResult::Found(positions) => {
+                let positions: Vec<Pos> = positions.into_iter().map(|(p, _)| p).collect();
+                assert_eq!(positions.len(), 2);
+                assert!(positions.contains(&Pos { x: 1, y: 0 }));
+                assert!(positions.contains(&Pos { x: 0, y: 1 }));
+            }
+        }
     }
 
     #[test]
     fn test_arrangement() {
+        init_logging();
+
         let tiles = example_tiles();
         let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
-        let arrangement = arrange_tiles(3, 3, &tiles_by_ref);
+        let allowed_neighbours = AllowedOrientedTiles::new(&tiles_by_ref);
+        let arrangement = arrange_tiles(3, 3, &tiles_by_ref, &allowed_neighbours);
         assert!(arrangement.is_some());
         let arrangement = arrangement.unwrap();
         let corners = vec![
