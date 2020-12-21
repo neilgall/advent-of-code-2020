@@ -4,110 +4,131 @@ use parser::*;
 // -- model
 
 #[derive(Debug, PartialEq)]
-struct Food {
-    ingredients: HashSet<String>,
-    allergens: HashSet<String>
+struct Food<'a> {
+    ingredients: HashSet<&'a str>,
+    allergens: HashSet<&'a str>
 }
 
-impl Food {
-    fn new(ingredients: &[&str], allergens: &[&str]) -> Self {
+impl<'a> Food<'a> {
+    fn new(ingredients: &[&'a str], allergens: &[&'a str]) -> Self {
         Food {
-            ingredients: ingredients.iter().map(|i| i.to_string()).collect(),
-            allergens: allergens.iter().map(|a| a.to_string()).collect()
+            ingredients: ingredients.iter().cloned().collect(),
+            allergens: allergens.iter().cloned().collect()
         }
     }
 }
 
-#[derive(Debug)]
-struct Assoc(HashMap<String, HashSet<String>>);
+struct Model<'a> {
+    foods: Vec<Food<'a>>,
+    ingredients_by_allergen: HashMap<&'a str, HashSet<&'a str>>,
+}
 
-impl Assoc {
-    fn new(foods: &[Food]) -> Self {
-        let mut assoc: HashMap<String, HashSet<String>> = HashMap::new();
+impl<'a> Model<'a> {
+    fn new(input: &'a str) -> Self {
+        let ingredients = one_or_more(whitespace_wrap(word_ref));
+        let allergens = word_ref
+            .sep_by(match_literal(", "))
+            .between(match_literal("(contains "), match_literal(")"));
 
-        for food in foods.iter() {
+        let food = pair(ingredients, allergens, |ingredients, allergens| Food {
+            ingredients: ingredients.into_iter().collect(),
+            allergens: allergens.into_iter().collect()
+        });
+
+        let foods = one_or_more(whitespace_wrap(food)).parse(input).unwrap().1;
+
+        Model {
+            foods,
+            ingredients_by_allergen: HashMap::new()
+        }
+    }
+
+    fn determine_allergens(&mut self) {
+        self.associate_ingredients_with_allergens();
+        while !self.is_fully_determined() {
+            self.eliminate_duplicate_matches();
+        }
+    }
+
+    fn associate_ingredients_with_allergens(&mut self) {
+        for food in self.foods.iter() {
             for allergen in food.allergens.iter() {
-                match assoc.get_mut(allergen) {
+                match self.ingredients_by_allergen.get_mut(allergen) {
                     Some(existing) => {
                         *existing = existing.intersection(&food.ingredients).cloned().collect();
                     }
                     None => {
-                        assoc.insert(allergen.to_string(), food.ingredients.clone());
+                        self.ingredients_by_allergen.insert(allergen, food.ingredients.clone());
                     }
                 }
             }
         }
-
-        Assoc(assoc)
     }
 
     fn is_fully_determined(&self) -> bool {
-        self.0.values().all(|ingredients| ingredients.len() < 2)
+        self.ingredients_by_allergen.values().all(|ingredients| ingredients.len() < 2)
     }
 
     fn eliminate_duplicate_matches(&mut self) {
-        let determined: HashSet<String> = self.0.values()
+        let determined: HashSet<&'a str> = self.ingredients_by_allergen.values()
             .filter_map(|ingredients|
                 if ingredients.len() == 1 { ingredients.iter().next() } else { None }
             ).cloned().collect();
 
-        for ingredients in self.0.values_mut().filter(|ings| ings.len() > 1) {
+        for ingredients in self.ingredients_by_allergen.values_mut().filter(|ings| ings.len() > 1) {
             *ingredients = ingredients.difference(&determined).cloned().collect();
         }
     }
 
-    fn ingredients_with_allergen(&self) -> HashSet<String> {
-        self.0.values().flat_map(|values| values.iter().cloned()).collect()
+    fn ingredients_with_allergen(&self) -> HashSet<&'a str> {
+        self.ingredients_by_allergen.values().flat_map(|values| values.iter().cloned()).collect()
+    }
+
+    fn all_ingredients(&self) -> HashSet<&'a str> {
+        self.foods.iter().flat_map(|food| food.ingredients.iter().cloned()).collect()
+    }
+
+    fn ingredients_with_no_allergen(&self) -> HashSet<&'a str> {
+        self.all_ingredients()
+            .difference(&self.ingredients_with_allergen())
+            .cloned()
+            .collect()
     }
 }
 
-
-// -- parser
-
-fn parse_input(input: &str) -> ParseResult<Vec<Food>> {
-    let ingredients = one_or_more(whitespace_wrap(identifier));
-    let allergens = identifier
-        .sep_by(match_literal(", "))
-        .between(match_literal("(contains "), match_literal(")"));
-
-    let food = pair(ingredients, allergens, |ingredients, allergens| Food {
-        ingredients: ingredients.into_iter().collect(),
-        allergens: allergens.into_iter().collect()
-    });
-
-    one_or_more(whitespace_wrap(food)).parse(input)
-}
 
 // -- problems 
 
-fn part1(foods: &Vec<Food>) -> usize {
-    let mut assoc = Assoc::new(&foods[..]);
-    while !assoc.is_fully_determined() {
-        assoc.eliminate_duplicate_matches();
-    }
-    let all_ingredients: HashSet<String> = foods.iter().flat_map(|food| food.ingredients.iter().cloned()).collect();
-    let ingredients_with_allergen = assoc.ingredients_with_allergen();
+fn part1(input: &str) -> usize {
+    let mut model = Model::new(input);
+    model.determine_allergens();
 
-    let ingredients_with_no_allergen: HashSet<String> = all_ingredients.difference(&ingredients_with_allergen).cloned().collect();
-
-    foods.iter().map(|food|
-        food.ingredients.intersection(&ingredients_with_no_allergen).count()
+    model.foods.iter().map(|food|
+        food.ingredients.intersection(&model.ingredients_with_no_allergen()).count()
     ).sum()
 }
 
 fn main() {
     let input = std::fs::read_to_string("./input.txt").unwrap();
-    let foods = parse_input(&input).unwrap().1;
 
-    println!("part 1 {}", part1(&foods));
+    println!("part 1 {}", part1(&input));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn test_foods() -> Vec<Food> {
-        vec![
+    fn test_input() -> &'static str {
+        "mxmxvkd kfcds sqjhc nhms (contains dairy, fish)
+         trh fvjkl sbzzf mxmxvkd (contains dairy)
+         sqjhc fvjkl (contains soy)
+         sqjhc mxmxvkd sbzzf (contains fish)"        
+    }
+
+    #[test]
+    fn test_parser() {
+        let model = Model::new(test_input());
+        assert_eq!(model.foods, vec![
             Food::new(
                 &["mxmxvkd", "kfcds", "sqjhc", "nhms"],
                 &["dairy", "fish"]
@@ -124,22 +145,11 @@ mod tests {
                 &["sqjhc", "mxmxvkd", "sbzzf"],
                 &["fish"]
             )
-        ]
-    }
-
-    #[test]
-    fn test_parser() {
-        let foods = parse_input("
-            mxmxvkd kfcds sqjhc nhms (contains dairy, fish)
-            trh fvjkl sbzzf mxmxvkd (contains dairy)
-            sqjhc fvjkl (contains soy)
-            sqjhc mxmxvkd sbzzf (contains fish)
-        ");
-        assert_eq!(foods, Ok(("", test_foods())));
+        ]);
     }
 
     #[test]
     fn test_part1() {
-        assert_eq!(part1(&test_foods()), 5);
+        assert_eq!(part1(test_input()), 5);
     }
 }
