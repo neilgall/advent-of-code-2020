@@ -94,24 +94,36 @@ impl<'a> Model<'a> {
             .cloned()
             .collect()
     }
+
+    fn ingredients_alphabetically_by_allergen(&self) -> Vec<&'a str> {
+        let mut allergens: Vec<&'a str> = self.ingredients_by_allergen.keys().cloned().collect();
+        allergens.sort();
+        allergens.iter().filter_map(|a| 
+            self.ingredients_by_allergen.get(a).and_then(|ings| ings.iter().next())
+        ).cloned().collect()
+    }
 }
 
 
 // -- problems 
 
-fn part1(input: &str) -> usize {
-    let mut model = Model::new(input);
-    model.determine_allergens();
-
+fn part1(model: &Model) -> usize {
     model.foods.iter().map(|food|
         food.ingredients.intersection(&model.ingredients_with_no_allergen()).count()
     ).sum()
 }
 
+fn part2(model: &Model) -> String {
+    model.ingredients_alphabetically_by_allergen().join(",")
+}
+
 fn main() {
     let input = std::fs::read_to_string("./input.txt").unwrap();
+    let mut model = Model::new(&input);
+    model.determine_allergens();
 
-    println!("part 1 {}", part1(&input));
+    println!("part 1 {}", part1(&model));
+    println!("part 2 {}", part2(&model));
 }
 
 #[cfg(test)]
@@ -150,6 +162,15 @@ mod tests {
 
     #[test]
     fn test_part1() {
-        assert_eq!(part1(test_input()), 5);
+        let mut model = Model::new(test_input());
+        model.determine_allergens();
+        assert_eq!(part1(&model), 5);
+    }
+
+    #[test]
+    fn test_part2() {
+        let mut model = Model::new(test_input());
+        model.determine_allergens();
+        assert_eq!(part2(&model), "mxmxvkd,sqjhc,fvjkl");
     }
 }

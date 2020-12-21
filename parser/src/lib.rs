@@ -148,6 +148,27 @@ pub fn identifier(input: &str) -> ParseResult<String> {
     Ok((&input[next_index..], matched))
 }
 
+pub fn word_ref(input: &str) -> ParseResult<&str> {
+    let mut matched = 0;
+    let mut chars = input.chars();
+
+    match chars.next() {
+        Some(next) if next.is_alphabetic() => matched += 1,
+        _ => return Err(input)
+    }
+
+    while let Some(next) = chars.next() {
+        if next.is_alphabetic() {
+            matched += 1;
+        } else {
+            break;
+        }
+    }
+
+    Ok((&input[matched..], &input[0..matched]))
+}
+
+
 pub fn pair<'a, P1, P2, R1, R2, F, R>(parser1: P1, parser2: P2, f: F) -> impl Parser<'a, R>
 where
     P1: Parser<'a, R1>,
