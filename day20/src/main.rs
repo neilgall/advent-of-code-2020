@@ -209,6 +209,21 @@ impl Pos {
     fn right(&self) -> Pos {
         Pos { x: self.x + 1, y: self.y }
     }
+
+    fn neighbours(&self) -> impl Iterator<Item=Pos> + '_ {
+        let mut i = 0;
+        std::iter::from_fn(move || {
+            let n = i;
+            i += 1;
+            match n {
+                0 => Some(self.up()),
+                1 => Some(self.down()),
+                2 => Some(self.left()),
+                3 => Some(self.right()),
+                _ => None
+            }
+        })
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -264,30 +279,31 @@ struct Arrangement<'a> {
     allowed_neighbours: &'a AllowedOrientedTiles,
     fixed_tiles: [[TilePlacement<'a>; 12]; 12],
     available_tiles: HashMap<TileID, &'a Tile>,
-    empty_positions: HashSet<Pos>
+    next_positions: HashSet<Pos>
 }
 
 
 impl<'a> Arrangement<'a> {
     fn new(width: i64, height: i64, tiles: &[&'a Tile], allowed_neighbours: &'a AllowedOrientedTiles) -> Self {
-        let empty_positions = (0..height).flat_map(move |y|
-            (0..width).map(move |x| Pos { x, y })
-        ).collect();
-
         Arrangement {
             width,
             height,
             allowed_neighbours,
             fixed_tiles: Default::default(),
             available_tiles: tiles.iter().map(|tile| (tile.id, *tile)).collect(),
-            empty_positions
+            next_positions: HashSet::new()
         }
     }
 
     fn place(&mut self, pos: &Pos, orientation: Orientation, tile_id: TileID) {
         if let Some(tile) = self.available_tiles.remove(&tile_id) {
             self.fixed_tiles[pos.y as usize][pos.x as usize] = TilePlacement::Placed { orientation, tile };
-            self.empty_positions.remove(pos);
+            self.next_positions.remove(pos);
+            for n in pos.neighbours() {
+                if self.valid(&n) && self.tile_at(&n) == &TilePlacement::None {
+                    self.next_positions.insert(n);
+                }
+            }
             debug!("place {} {:?} at {:?}", tile_id, orientation, pos);
             debug!("{:?}", self);
         } else {
@@ -301,15 +317,23 @@ impl<'a> Arrangement<'a> {
             TilePlacement::Placed { orientation: _, tile } => {
                 self.available_tiles.insert(tile.id, tile);
                 self.fixed_tiles[pos.y as usize][pos.x as usize] = TilePlacement::None;
-                self.empty_positions.insert(*pos);
+                self.next_positions.insert(*pos);
                 debug!("remove {} from {:?}", tile.id, pos);
                 debug!("{:?}", self);
             }
         }
     }
 
+    fn valid(&self, pos: &Pos) -> bool {
+        0 <= pos.x && 0 <= pos.y && pos.x < self.width && pos.y < self.height
+        && (
+            // edges only
+            pos.x == 0 || pos.y == 0 || pos.x == self.width-1 || pos.y == self.height-1
+        )
+    }
+
     fn tile_at(&self, pos: &Pos) -> &'a TilePlacement {
-        if 0 <= pos.x && 0 <= pos.y && pos.x < self.width && pos.y < self.height {
+        if self.valid(pos) {
             &self.fixed_tiles[pos.y as usize][pos.x as usize]
         } else {
             &TilePlacement::None
@@ -363,7 +387,7 @@ impl<'a> Arrangement<'a> {
 
     fn possible_placements(&self) -> SearchResult<Vec<(Pos, HashSet<OrientedTile>)>> {
         let mut placements = vec![];
-        for pos in self.empty_positions.iter() {
+        for pos in self.next_positions.iter() {
             let search = self.possible_orientations(pos);
             // debug!("possible placements {:?} {:?}", pos, search);
             match search {
@@ -376,7 +400,7 @@ impl<'a> Arrangement<'a> {
     }
 
     fn try_arrange(&mut self) -> SearchResult<()> {
-        if self.available_tiles.is_empty() {
+        if self.next_positions.is_empty() {
             SearchResult::Found(())
         } else {
             match self.possible_placements() {
