@@ -45,7 +45,8 @@ struct Tile {
     top: EdgePattern,
     left: EdgePattern,
     right: EdgePattern,
-    bottom: EdgePattern
+    bottom: EdgePattern,
+    content: Vec<Vec<char>>
 }
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, EnumIter, Hash)]
@@ -276,7 +277,6 @@ enum SearchResult<T> {
 struct Arrangement<'a> {
     width: i64,
     height: i64,
-    allowed_neighbours: &'a AllowedOrientedTiles,
     fixed_tiles: [[TilePlacement<'a>; 12]; 12],
     available_tiles: HashMap<TileID, &'a Tile>,
     next_positions: HashSet<Pos>
@@ -284,11 +284,10 @@ struct Arrangement<'a> {
 
 
 impl<'a> Arrangement<'a> {
-    fn new(width: i64, height: i64, tiles: &[&'a Tile], allowed_neighbours: &'a AllowedOrientedTiles) -> Self {
+    fn new(width: i64, height: i64, tiles: &[&'a Tile]) -> Self {
         Arrangement {
             width,
             height,
-            allowed_neighbours,
             fixed_tiles: Default::default(),
             available_tiles: tiles.iter().map(|tile| (tile.id, *tile)).collect(),
             next_positions: HashSet::new()
@@ -326,10 +325,6 @@ impl<'a> Arrangement<'a> {
 
     fn valid(&self, pos: &Pos) -> bool {
         0 <= pos.x && 0 <= pos.y && pos.x < self.width && pos.y < self.height
-        // && (
-        //     // edges only
-        //     pos.x == 0 || pos.y == 0 || pos.x == self.width-1 || pos.y == self.height-1
-        // )
     }
 
     fn tile_at(&self, pos: &Pos) -> &'a TilePlacement {
@@ -347,33 +342,30 @@ impl<'a> Arrangement<'a> {
         }
     }
 
-    fn possible_orientations(&self, pos: &Pos) -> SearchResult<HashSet<OrientedTile>> {
+    fn possible_orientations(&self, pos: &Pos, allowed_neighbours: &AllowedOrientedTiles) -> SearchResult<HashSet<OrientedTile>> {
         let mut possible = OrientedTileSet::new();
 
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.left()) {
-            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::RightOf));
+            possible.restrict_to(allowed_neighbours.get(tile.id, *orientation, Relationship::RightOf));
         }
 
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.up()) {
-            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::Below));
+            possible.restrict_to(allowed_neighbours.get(tile.id, *orientation, Relationship::Below));
             if possible.is_empty() {
-                debug!("invalid tile {:?} above {:?}", tile.id, pos);
                 return SearchResult::InvalidPlacement(tile.id);
             }
         }
 
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.right()) {
-            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::LeftOf));
+            possible.restrict_to(allowed_neighbours.get(tile.id, *orientation, Relationship::LeftOf));
             if possible.is_empty() {
-                debug!("invalid tile {:?} right of {:?}", tile.id, pos);
                 return SearchResult::InvalidPlacement(tile.id);
             }
         }
 
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.down()) {
-            possible.restrict_to(self.allowed_neighbours.get(tile.id, *orientation, Relationship::Above));
+            possible.restrict_to(allowed_neighbours.get(tile.id, *orientation, Relationship::Above));
             if possible.is_empty() {
-                debug!("invalid tile {:?} below {:?}", tile.id, pos);
                 return SearchResult::InvalidPlacement(tile.id);
             }
         }
@@ -385,13 +377,13 @@ impl<'a> Arrangement<'a> {
         }
     } 
 
-    fn try_arrange(&mut self) -> SearchResult<()> {
+    fn try_arrange(&mut self, allowed_neighbours: &AllowedOrientedTiles) -> SearchResult<()> {
         match self.next_positions.iter().cloned().next() {
             None =>
                 SearchResult::Found(()),
 
             Some(pos) =>
-                match self.possible_orientations(&pos) {
+                match self.possible_orientations(&pos, allowed_neighbours) {
                     SearchResult::Empty => SearchResult::Empty,
 
                     SearchResult::InvalidPlacement(tile_id) => SearchResult::InvalidPlacement(tile_id),
@@ -399,7 +391,7 @@ impl<'a> Arrangement<'a> {
                     SearchResult::Found(oriented_tiles) => {
                         for tile in oriented_tiles.iter() {
                             self.place(&pos, tile.orientation, tile.tile_id);
-                            match self.try_arrange() {
+                            match self.try_arrange(allowed_neighbours) {
                                 SearchResult::InvalidPlacement(tile_id) if tile_id != tile.tile_id => {
                                     self.remove(&pos);
                                     return SearchResult::InvalidPlacement(tile_id);
@@ -416,6 +408,27 @@ impl<'a> Arrangement<'a> {
                     }
                 }
         }
+    }
+
+    fn image(&self) -> Vec<Vec<char>> {
+        let mut image = vec![];
+        for tiley in 0..self.height as usize {
+            for y in 0..8 {
+                let mut row = vec![];
+                for tilex in 0..self.width as usize {
+                    match self.fixed_tiles[tiley][tilex] {
+                        TilePlacement::Placed { tile, orientation: _ } => {
+                            tile.content[y].iter().for_each(|c| row.push(*c));
+                        }
+                        _ => {
+                            panic!("can't generate image until tiles are arranged");
+                        }
+                    }
+                }
+                image.push(row);
+            }
+        }
+        image
     }
 }
 
@@ -434,13 +447,15 @@ impl<'a> fmt::Debug for Arrangement<'a> {
     }
 }
 
-fn arrange_tiles<'a>(width: i64, height: i64, tiles: &Vec<&'a Tile>, neighbours: &'a AllowedOrientedTiles) -> Option<Arrangement<'a>> {
+fn arrange_tiles<'a>(width: i64, height: i64, tiles: &Vec<&'a Tile>) -> Option<Arrangement<'a>> {
+    let allowed_neighbours = AllowedOrientedTiles::new(tiles);
+
     tiles.iter().filter_map(|tile|
         Orientation::iter().filter_map(|orientation| {
             info!("trying {} {:?} in start position", tile.id, orientation);
-            let mut arrangement = Arrangement::new(width, height, tiles, &neighbours);
+            let mut arrangement = Arrangement::new(width, height, tiles);
             arrangement.place(&Pos { x: 0, y: 0 }, orientation, tile.id);
-            match arrangement.try_arrange() {
+            match arrangement.try_arrange(&allowed_neighbours) {
                 SearchResult::Found(()) => Some(arrangement),
                 _ => None
             }
@@ -450,16 +465,27 @@ fn arrange_tiles<'a>(width: i64, height: i64, tiles: &Vec<&'a Tile>, neighbours:
 
 // -- parser
 
-fn decode_row(cells: &Vec<EdgePattern>) -> EdgePattern {
+fn decode_cell(c: char) -> EdgePattern {
+    if c == '#' { 1 } else { 0 }
+}
+
+fn decode_row(cells: &Vec<char>) -> EdgePattern {
     cells.iter().fold(0, |pattern, cell|
-        (pattern << 1) | cell
+        (pattern << 1) | decode_cell(*cell)
     )
 }
 
-fn decode_column(cells: &Vec<Vec<EdgePattern>>, column: usize) -> EdgePattern {
+fn decode_column(cells: &Vec<Vec<char>>, column: usize) -> EdgePattern {
     cells.iter().fold(0, |pattern, row|
-        (pattern << 1) | row[column]
+        (pattern << 1) | decode_cell(row[column])
     ) 
+}
+
+fn trim_edges(cells: &Vec<Vec<char>>) -> Vec<Vec<char>> {
+    cells[1..cells.len()-1]
+        .iter()
+        .map(|row| row[1..row.len()-1].iter().copied().collect())
+        .collect()
 }
 
 fn parse_input(input: &str) -> ParseResult<Vec<Tile>> {
@@ -467,7 +493,7 @@ fn parse_input(input: &str) -> ParseResult<Vec<Tile>> {
         .between(match_literal("Tile "), match_literal(":\n"))
         .map(|i| i as TileID);
 
-    let tile_char = any_char.pred(|c| *c == '#').means(1).or(any_char.pred(|c| *c == '.').means(0));
+    let tile_char = any_char.pred(|c| *c == '#' || *c == '.');
     let tile_row = whitespace_wrap(one_or_more(tile_char));
     let tile = pair(tile_id, one_or_more(tile_row), |id, cells| 
         Tile {
@@ -475,7 +501,8 @@ fn parse_input(input: &str) -> ParseResult<Vec<Tile>> {
             top: decode_row(&cells[0]),
             bottom: decode_row(&cells[cells.len()-1]),
             left: decode_column(&cells, 0),
-            right: decode_column(&cells, cells[0].len()-1)
+            right: decode_column(&cells, cells[0].len()-1),
+            content: trim_edges(&cells)
         }
     );
 
@@ -492,11 +519,15 @@ fn part1(tiles: &Vec<&Tile>) -> Option<usize> {
         Pos { x: 11, y: 11 }
     ];
 
-    let allowed_neighbours = AllowedOrientedTiles::new(tiles);
-
-    arrange_tiles(12, 12, tiles, &allowed_neighbours).map(|arrangement|
+    arrange_tiles(12, 12, tiles).map(|arrangement|
         corners.iter().filter_map(|c| arrangement.tile_id_at(c)).product()
     )
+}
+
+fn part2(tiles: &Vec<&Tile>) -> usize {
+    let image = arrange_tiles(12, 12, tiles).unwrap().image();
+    println!("{:?}", image);
+    0
 }
 
 fn main() {
@@ -505,6 +536,7 @@ fn main() {
     let tiles = parse_input(&input).unwrap().1;
     let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
     println!("part 1 {:?}", part1(&tiles_by_ref));
+    println!("part 2 {:?}", part2(&tiles_by_ref));
 }
 
 #[cfg(test)]
@@ -533,7 +565,8 @@ mod tests {
             top: 0x0d2,
             bottom: 0x0e7,
             left: 0x1f2,
-            right: 0x059
+            right: 0x059,
+            content: vec![]
         });
     }
 
@@ -551,7 +584,8 @@ mod tests {
             top: 0x2F9,
             bottom: 0x077,
             left: 0x325,
-            right: 0x16D
+            right: 0x16D,
+            content: vec![]
         };
         
         assert_eq!(tile.top_edge_in_orientation(R0), 0x2F9);
@@ -596,8 +630,7 @@ mod tests {
 
         let tiles = example_tiles();
         let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
-        let allowed_neighbours = AllowedOrientedTiles::new(&tiles_by_ref);
-        let arrangement = arrange_tiles(3, 3, &tiles_by_ref, &allowed_neighbours);
+        let arrangement = arrange_tiles(3, 3, &tiles_by_ref);
         assert!(arrangement.is_some());
         let arrangement = arrangement.unwrap();
         let corners = vec![
