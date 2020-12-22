@@ -1,4 +1,5 @@
-use std::collections::{HashSet, VecDeque};
+use log::debug;
+use std::collections::{HashSet, HashMap, VecDeque};
 use parser::*;
 
 // -- model
@@ -8,6 +9,7 @@ type Score = i64;
 type PlayerID = usize;
 type Player = VecDeque<Card>;
 type GameState = Vec<Player>;
+type GameMemos = HashMap<Player, PlayerID>;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum Rules {
@@ -18,7 +20,8 @@ enum Rules {
 #[derive(Debug, PartialEq)]
 struct Game {
     players: GameState,
-    history: HashSet<GameState>,
+    history: HashSet<Player>,
+    prefix: String,
     round: usize
 }
 
@@ -27,16 +30,19 @@ impl Game {
         Game {
             players,
             history: HashSet::new(),
+            prefix: "".to_string(),
             round: 0
         }
     }
 
     fn make_sub_game(&self, drawn: &Vec<(PlayerID, Card)>) -> Game {
-        Game::new(
+        let mut game = Game::new(
             drawn.iter().map(|(player, card)|
                 self.players[*player].iter().take(*card as usize).copied().collect()
             ).collect()
-        )
+        );
+        game.prefix = format!("{}  ", self.prefix);
+        game
     }
 
     fn cards(&self, player: PlayerID) -> Vec<Card> {
@@ -47,12 +53,14 @@ impl Game {
         cards.iter().all(|(player, card)| self.players[*player].len() >= *card as usize)
     }
 
-    fn play_round(&mut self, rules: Rules) {
+    fn play_round(&mut self, rules: Rules, memos: &mut GameMemos) {
         self.round += 1;
-        println!("round {}\n  player 1 {:?}\n  player 2 {:?}", self.round, self.players[0], self.players[1]);
+        debug!("{}round {}", self.prefix, self.round);
+        debug!("{}player 1 {:?}", self.prefix, self.players[0]);
+        debug!("{}player 2 {:?}", self.prefix, self.players[1]);
 
-        let repeats_previous_round = self.history.contains(&self.players);
-        self.history.insert(self.players.clone());
+        let repeats_previous_round = self.history.contains(&self.players[0]);
+        self.history.insert(self.players[0].clone());
 
         let mut top_cards: Vec<(PlayerID, Card)> = 
             self.players.iter_mut().filter_map(|p| p.pop_front()).enumerate().collect();
@@ -64,9 +72,18 @@ impl Game {
                 winner = Some(0);
 
             } else if self.should_recurse(&top_cards) {
-                let mut sub_game = self.make_sub_game(&top_cards);
-                sub_game.play_until_over(Rules::Recursive);
-                winner = Some(sub_game.winner());
+                match memos.get(&self.players[0]) {
+                    Some(w) => {
+                        winner = Some(*w);
+                    }
+                    None => {
+                        let mut sub_game = self.make_sub_game(&top_cards);
+                        sub_game.play_until_over(Rules::Recursive, memos);
+                        let w = sub_game.winner();
+                        winner = Some(w);
+                        memos.insert(self.players[0].clone(), w);
+                    }
+                }
             }
         }
 
@@ -89,9 +106,9 @@ impl Game {
         self.players.iter().any(|p| p.is_empty())
     }
 
-    fn play_until_over(&mut self, rules: Rules) {
+    fn play_until_over(&mut self, rules: Rules, memos: &mut GameMemos) {
         while !self.over() {
-            self.play_round(rules);
+            self.play_round(rules, memos);
         }
     }
 
@@ -121,16 +138,17 @@ fn parse_input(input: &str) -> ParseResult<Game> {
 // -- problems
 
 fn part1(game: &mut Game) -> Score {
-    game.play_until_over(Rules::Normal); 
+    game.play_until_over(Rules::Normal, &mut GameMemos::new()); 
     game.winning_score()
 }
 
 fn part2(game: &mut Game) -> Score {
-    game.play_until_over(Rules::Recursive); 
+    game.play_until_over(Rules::Recursive, &mut GameMemos::new()); 
     game.winning_score()
 }
 
 fn main() {
+    env_logger::init();
     let input = std::fs::read_to_string("./input.txt").unwrap();
     let mut game = parse_input(&input).unwrap().1;
     println!("part 1 {}", part1(&mut game));
@@ -173,15 +191,15 @@ mod tests {
     #[test]
     fn test_play_round() {
         let mut game = test_game();
-        game.play_round(Rules::Normal);
+        game.play_round(Rules::Normal, &mut GameMemos::new());
         assert_eq!(game.cards(0), vec![2, 6, 3, 1, 9, 5]);
         assert_eq!(game.cards(1), vec![8, 4, 7, 10]);
 
-        game.play_round(Rules::Normal);
+        game.play_round(Rules::Normal, &mut GameMemos::new());
         assert_eq!(game.cards(0), vec![6, 3, 1, 9, 5]);
         assert_eq!(game.cards(1), vec![4, 7, 10, 8, 2]);
 
-        game.play_round(Rules::Normal);
+        game.play_round(Rules::Normal, &mut GameMemos::new());
         assert_eq!(game.cards(0), vec![3, 1, 9, 5, 6, 4]);
         assert_eq!(game.cards(1), vec![7, 10, 8, 2]);
     }
@@ -189,23 +207,32 @@ mod tests {
     #[test]
     fn test_game_over() {
         let mut game = test_game();
-        game.play_until_over(Rules::Normal);
+        game.play_until_over(Rules::Normal, &mut GameMemos::new());
         assert_eq!(game.round, 29);
     }
 
     #[test]
     fn test_score() {
         let mut game = test_game();
-        game.play_until_over(Rules::Normal); 
+        game.play_until_over(Rules::Normal, &mut GameMemos::new()); 
         assert_eq!(game.winning_score(), 306);
+    }
+
+    #[test]
+    fn test_infinite_recursion_rule_works() {
+        let mut game = Game::new(vec![
+            vec![43, 19].into_iter().collect(),
+            vec![2, 29, 14].into_iter().collect()
+        ]);
+        game.play_until_over(Rules::Recursive, &mut GameMemos::new());
     }
 
     #[test]
     fn test_play_recursive() {
         let mut game = test_game();
-        game.play_until_over(Rules::Recursive);
+        game.play_until_over(Rules::Recursive, &mut GameMemos::new());
         
-        assert_eq!(game.winning_score(), 290);
+        assert_eq!(game.winning_score(), 291);
         assert_eq!(game.round, 17);
         assert_eq!(game.winner(), 1);
     }
