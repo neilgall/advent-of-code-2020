@@ -326,10 +326,10 @@ impl<'a> Arrangement<'a> {
 
     fn valid(&self, pos: &Pos) -> bool {
         0 <= pos.x && 0 <= pos.y && pos.x < self.width && pos.y < self.height
-        && (
-            // edges only
-            pos.x == 0 || pos.y == 0 || pos.x == self.width-1 || pos.y == self.height-1
-        )
+        // && (
+        //     // edges only
+        //     pos.x == 0 || pos.y == 0 || pos.x == self.width-1 || pos.y == self.height-1
+        // )
     }
 
     fn tile_at(&self, pos: &Pos) -> &'a TilePlacement {
@@ -385,48 +385,36 @@ impl<'a> Arrangement<'a> {
         }
     } 
 
-    fn possible_placements(&self) -> SearchResult<Vec<(Pos, HashSet<OrientedTile>)>> {
-        let mut placements = vec![];
-        for pos in self.next_positions.iter() {
-            let search = self.possible_orientations(pos);
-            // debug!("possible placements {:?} {:?}", pos, search);
-            match search {
-                SearchResult::Empty => {},
-                SearchResult::Found(tile_set) => placements.push((*pos, tile_set)),
-                SearchResult::InvalidPlacement(tile_id) => return SearchResult::InvalidPlacement(tile_id)
-           }
-        }
-        SearchResult::Found(placements)
-    }
-
     fn try_arrange(&mut self) -> SearchResult<()> {
-        if self.next_positions.is_empty() {
-            SearchResult::Found(())
-        } else {
-            match self.possible_placements() {
-                SearchResult::Empty => SearchResult::Empty,
-                SearchResult::InvalidPlacement(tile_id) => SearchResult::InvalidPlacement(tile_id),
-                SearchResult::Found(placements) => {
-                    for (position, oriented_tiles) in placements.iter() {
+        match self.next_positions.iter().cloned().next() {
+            None =>
+                SearchResult::Found(()),
+
+            Some(pos) =>
+                match self.possible_orientations(&pos) {
+                    SearchResult::Empty => SearchResult::Empty,
+
+                    SearchResult::InvalidPlacement(tile_id) => SearchResult::InvalidPlacement(tile_id),
+
+                    SearchResult::Found(oriented_tiles) => {
                         for tile in oriented_tiles.iter() {
-                            self.place(position, tile.orientation, tile.tile_id);
+                            self.place(&pos, tile.orientation, tile.tile_id);
                             match self.try_arrange() {
                                 SearchResult::InvalidPlacement(tile_id) if tile_id != tile.tile_id => {
-                                    self.remove(position);
+                                    self.remove(&pos);
                                     return SearchResult::InvalidPlacement(tile_id);
                                 }
                                 SearchResult::Found(_) => {
                                     return SearchResult::Found(());
                                 }
                                 SearchResult::Empty | SearchResult::InvalidPlacement(_) => {
-                                    self.remove(position);
+                                    self.remove(&pos);
                                 }
                             }
                         }
+                        SearchResult::Empty
                     }
-                    SearchResult::Empty
                 }
-            }
         }
     }
 }
@@ -600,25 +588,6 @@ mod tests {
         assert!(allowed_neighbours.get(1951, R0FlipV, RightOf).contains(&OrientedTile { tile_id: 2311, orientation: R0FlipV }));
         assert!(allowed_neighbours.get(2729, R0FlipV, Below).contains(&OrientedTile { tile_id: 2971, orientation: R0FlipV }));
         assert!(allowed_neighbours.get(2311, R0FlipV, RightOf).contains(&OrientedTile { tile_id: 3079, orientation: R0 }));
-    }
-
-    #[test]
-    fn test_possible_placements() {
-        let tiles = example_tiles();
-        let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
-        let allowed_neighbours = AllowedOrientedTiles::new(&tiles_by_ref);
-        let mut arrangement = Arrangement::new(3, 3, &tiles_by_ref, &allowed_neighbours);
-        arrangement.place(&Pos { x: 0, y: 0 }, Orientation::R0FlipV, 1951);
-        match arrangement.possible_placements() {
-            SearchResult::InvalidPlacement(_) => panic!("invalid placement"),
-            SearchResult::Empty => panic!("nothing found"),
-            SearchResult::Found(positions) => {
-                let positions: Vec<Pos> = positions.into_iter().map(|(p, _)| p).collect();
-                assert_eq!(positions.len(), 2);
-                assert!(positions.contains(&Pos { x: 1, y: 0 }));
-                assert!(positions.contains(&Pos { x: 0, y: 1 }));
-            }
-        }
     }
 
     #[test]
