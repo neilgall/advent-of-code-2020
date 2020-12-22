@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use parser::*;
 
 // -- model
@@ -8,7 +8,6 @@ type Score = i64;
 type PlayerID = usize;
 type Player = VecDeque<Card>;
 type GameState = Vec<Player>;
-type GameMemos = HashMap<GameState, PlayerID>;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum Rules {
@@ -19,24 +18,25 @@ enum Rules {
 #[derive(Debug, PartialEq)]
 struct Game {
     players: GameState,
-    history: HashSet<GameState>
-}
-
-impl Clone for Game {
-    fn clone(&self) -> Self {
-        Game {
-            players: self.players.clone(),
-            history: HashSet::new()
-        }
-    }
+    history: HashSet<GameState>,
+    round: usize
 }
 
 impl Game {
     fn new(players: GameState) -> Self {
         Game {
             players,
-            history: HashSet::new()
+            history: HashSet::new(),
+            round: 0
         }
+    }
+
+    fn make_sub_game(&self, drawn: &Vec<(PlayerID, Card)>) -> Game {
+        Game::new(
+            drawn.iter().map(|(player, card)|
+                self.players[*player].iter().take(*card as usize).copied().collect()
+            ).collect()
+        )
     }
 
     fn cards(&self, player: PlayerID) -> Vec<Card> {
@@ -47,8 +47,9 @@ impl Game {
         cards.iter().all(|(player, card)| self.players[*player].len() >= *card as usize)
     }
 
-    fn play_round(&mut self, rules: Rules, memos: &mut GameMemos) {
-        // println!("round {}\n  player 1 {:?}\n  player 2 {:?}", self.history.len()+1, self.players[0], self.players[1]);
+    fn play_round(&mut self, rules: Rules) {
+        self.round += 1;
+        println!("round {}\n  player 1 {:?}\n  player 2 {:?}", self.round, self.players[0], self.players[1]);
 
         let repeats_previous_round = self.history.contains(&self.players);
         self.history.insert(self.players.clone());
@@ -63,18 +64,9 @@ impl Game {
                 winner = Some(0);
 
             } else if self.should_recurse(&top_cards) {
-                match memos.get(&self.players) {
-                    Some(w) => {
-                        winner = Some(*w);
-                    }
-                    None => {
-                        let mut sub_game = self.clone();
-                        sub_game.play_until_over(Rules::Recursive, memos);
-                        let w = sub_game.winner();
-                        memos.insert(self.players.clone(), w);
-                        winner = Some(w);
-                    }
-                }
+                let mut sub_game = self.make_sub_game(&top_cards);
+                sub_game.play_until_over(Rules::Recursive);
+                winner = Some(sub_game.winner());
             }
         }
 
@@ -97,9 +89,9 @@ impl Game {
         self.players.iter().any(|p| p.is_empty())
     }
 
-    fn play_until_over(&mut self, rules: Rules, memos: &mut GameMemos) {
+    fn play_until_over(&mut self, rules: Rules) {
         while !self.over() {
-            self.play_round(rules, memos);
+            self.play_round(rules);
         }
     }
 
@@ -113,10 +105,6 @@ impl Game {
             0,
             |score, (index, card)| score + card * ((index+1) as Score)
         )
-    }
-
-    fn rounds_played(&self) -> usize {
-        self.history.len()
     }
 }
 
@@ -133,20 +121,22 @@ fn parse_input(input: &str) -> ParseResult<Game> {
 // -- problems
 
 fn part1(game: &mut Game) -> Score {
-    game.play_until_over(Rules::Normal, &mut GameMemos::new()); 
+    game.play_until_over(Rules::Normal); 
     game.winning_score()
 }
 
 fn part2(game: &mut Game) -> Score {
-    game.play_until_over(Rules::Recursive, &mut GameMemos::new()); 
+    game.play_until_over(Rules::Recursive); 
     game.winning_score()
 }
 
 fn main() {
     let input = std::fs::read_to_string("./input.txt").unwrap();
-    let game = parse_input(&input).unwrap().1;
-    println!("part 1 {}", part1(&mut game.clone()));
-    println!("part 2 {}", part2(&mut game.clone()));
+    let mut game = parse_input(&input).unwrap().1;
+    println!("part 1 {}", part1(&mut game));
+
+    let mut game = parse_input(&input).unwrap().1;
+    println!("part 2 {}", part2(&mut game))
 }
 
 
@@ -183,15 +173,15 @@ mod tests {
     #[test]
     fn test_play_round() {
         let mut game = test_game();
-        game.play_round(Rules::Normal, &mut GameMemos::new());
+        game.play_round(Rules::Normal);
         assert_eq!(game.cards(0), vec![2, 6, 3, 1, 9, 5]);
         assert_eq!(game.cards(1), vec![8, 4, 7, 10]);
 
-        game.play_round(Rules::Normal, &mut GameMemos::new());
+        game.play_round(Rules::Normal);
         assert_eq!(game.cards(0), vec![6, 3, 1, 9, 5]);
         assert_eq!(game.cards(1), vec![4, 7, 10, 8, 2]);
 
-        game.play_round(Rules::Normal, &mut GameMemos::new());
+        game.play_round(Rules::Normal);
         assert_eq!(game.cards(0), vec![3, 1, 9, 5, 6, 4]);
         assert_eq!(game.cards(1), vec![7, 10, 8, 2]);
     }
@@ -199,24 +189,24 @@ mod tests {
     #[test]
     fn test_game_over() {
         let mut game = test_game();
-        game.play_until_over(Rules::Normal, &mut GameMemos::new());
-        assert_eq!(game.rounds_played(), 29);
+        game.play_until_over(Rules::Normal);
+        assert_eq!(game.round, 29);
     }
 
     #[test]
     fn test_score() {
         let mut game = test_game();
-        game.play_until_over(Rules::Normal, &mut GameMemos::new()); 
+        game.play_until_over(Rules::Normal); 
         assert_eq!(game.winning_score(), 306);
     }
 
     #[test]
     fn test_play_recursive() {
         let mut game = test_game();
-        game.play_until_over(Rules::Recursive, &mut GameMemos::new());
+        game.play_until_over(Rules::Recursive);
         
-        assert_eq!(game.winning_score(), 291);
-        assert_eq!(game.rounds_played(), 17);
+        assert_eq!(game.winning_score(), 290);
+        assert_eq!(game.round, 17);
         assert_eq!(game.winner(), 1);
     }
 }
