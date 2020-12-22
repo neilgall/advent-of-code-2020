@@ -241,37 +241,30 @@ impl<'a> Default for TilePlacement<'a> {
 }
 
 struct OrientedTileSet {
-    initialised: bool,
+    unrestricted: bool,
     oriented_tiles: HashSet<OrientedTile>
 }
 
 impl OrientedTileSet {
     fn new() -> Self {
         OrientedTileSet {
-            initialised: false,
+            unrestricted: true,
             oriented_tiles: HashSet::new()
         }
     }
 
     fn restrict_to(&mut self, neighbours: &HashSet<OrientedTile>) {
-        if self.initialised {
+        if !self.unrestricted {
             self.oriented_tiles = self.oriented_tiles.intersection(neighbours).cloned().collect();
         } else {
             self.oriented_tiles = neighbours.clone();
-            self.initialised = true;
+            self.unrestricted = false;
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.initialised && self.oriented_tiles.is_empty()
+        !self.unrestricted && self.oriented_tiles.is_empty()
     }
-}
-
-#[derive(Debug)]
-enum SearchResult<T> {
-    Empty,
-    Found(T),
-    InvalidPlacement(TileID)
 }
 
 struct Arrangement<'a> {
@@ -342,7 +335,7 @@ impl<'a> Arrangement<'a> {
         }
     }
 
-    fn possible_orientations(&self, pos: &Pos, allowed_neighbours: &AllowedOrientedTiles) -> SearchResult<HashSet<OrientedTile>> {
+    fn possible_orientations(&self, pos: &Pos, allowed_neighbours: &AllowedOrientedTiles) -> Result<HashSet<OrientedTile>, TileID> {
         let mut possible = OrientedTileSet::new();
 
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.left()) {
@@ -352,73 +345,75 @@ impl<'a> Arrangement<'a> {
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.up()) {
             possible.restrict_to(allowed_neighbours.get(tile.id, *orientation, Relationship::Below));
             if possible.is_empty() {
-                return SearchResult::InvalidPlacement(tile.id);
+                return Err(tile.id);
             }
         }
 
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.right()) {
             possible.restrict_to(allowed_neighbours.get(tile.id, *orientation, Relationship::LeftOf));
             if possible.is_empty() {
-                return SearchResult::InvalidPlacement(tile.id);
+                return Err(tile.id);
             }
         }
 
         if let TilePlacement::Placed { tile, orientation } = self.tile_at(&pos.down()) {
             possible.restrict_to(allowed_neighbours.get(tile.id, *orientation, Relationship::Above));
             if possible.is_empty() {
-                return SearchResult::InvalidPlacement(tile.id);
+                return Err(tile.id);
             }
         }
 
-        if possible.initialised {
-            SearchResult::Found(possible.oriented_tiles)
-        } else {
-            SearchResult::Empty
+        if possible.unrestricted {
+            panic!("tried to place a tile with no neighbours at {:?}", pos);
         }
+
+        Ok(possible.oriented_tiles)
     } 
 
-    fn try_arrange(&mut self, allowed_neighbours: &AllowedOrientedTiles) -> SearchResult<()> {
+    fn try_arrange(&mut self, allowed_neighbours: &AllowedOrientedTiles) -> Result<(), TileID> {
         match self.next_positions.iter().cloned().next() {
             None =>
-                SearchResult::Found(()),
+                Ok(()),
 
             Some(pos) =>
                 match self.possible_orientations(&pos, allowed_neighbours) {
-                    SearchResult::Empty => SearchResult::Empty,
+                    Err(tile_id) => Err(tile_id),
 
-                    SearchResult::InvalidPlacement(tile_id) => SearchResult::InvalidPlacement(tile_id),
-
-                    SearchResult::Found(oriented_tiles) => {
+                    Ok(oriented_tiles) => {
                         for tile in oriented_tiles.iter() {
                             self.place(&pos, tile.orientation, tile.tile_id);
                             match self.try_arrange(allowed_neighbours) {
-                                SearchResult::InvalidPlacement(tile_id) if tile_id != tile.tile_id => {
+                                Err(tile_id)  => {
                                     self.remove(&pos);
-                                    return SearchResult::InvalidPlacement(tile_id);
+                                    if tile_id != tile.tile_id {
+                                        // cut search to point where the offending tile was placed
+                                        return Err(tile_id);
+                                    }
                                 }
-                                SearchResult::Found(_) => {
-                                    return SearchResult::Found(());
-                                }
-                                SearchResult::Empty | SearchResult::InvalidPlacement(_) => {
-                                    self.remove(&pos);
+                                Ok(_) => {
+                                    return Ok(());
                                 }
                             }
                         }
-                        SearchResult::Empty
+                        Err(0)
                     }
                 }
         }
     }
 
-    fn image(&self) -> Vec<Vec<char>> {
+    fn image(&self) -> Image {
         let mut image = vec![];
         for tiley in 0..self.height as usize {
             for y in 0..8 {
                 let mut row = vec![];
                 for tilex in 0..self.width as usize {
                     match self.fixed_tiles[tiley][tilex] {
-                        TilePlacement::Placed { tile, orientation: _ } => {
-                            tile.content[y].iter().for_each(|c| row.push(*c));
+                        TilePlacement::Placed { tile, orientation } => {
+                            let mut tile_image = Image::new(&tile.content);
+                            tile_image.orientation = orientation;
+                            for x in 0..8 {
+                                row.push(*tile_image.get(Pos { x, y }));
+                            }
                         }
                         _ => {
                             panic!("can't generate image until tiles are arranged");
@@ -428,7 +423,7 @@ impl<'a> Arrangement<'a> {
                 image.push(row);
             }
         }
-        image
+        Image::new(&image)
     }
 }
 
@@ -456,11 +451,150 @@ fn arrange_tiles<'a>(width: i64, height: i64, tiles: &Vec<&'a Tile>) -> Option<A
             let mut arrangement = Arrangement::new(width, height, tiles);
             arrangement.place(&Pos { x: 0, y: 0 }, orientation, tile.id);
             match arrangement.try_arrange(&allowed_neighbours) {
-                SearchResult::Found(()) => Some(arrangement),
-                _ => None
+                Ok(_) => Some(arrangement),
+                Err(_) => None
             }
         }).next()
     ).next()
+}
+
+impl std::ops::Add<&Pos> for Pos {
+    type Output = Pos;
+    fn add(self, other: &Pos) -> Self::Output {
+        Pos {
+            x: self.x + other.x,
+            y: self.y + other.y
+        }
+    }
+}
+
+struct Image {
+    image: Vec<Vec<char>>,
+    orientation: Orientation,
+    width: usize,
+    height: usize
+}
+
+impl fmt::Debug for Image {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "orientation {:?} size {:?}x{:?}", self.orientation, self.width(), self.height())?;
+        for y in 0..self.height() {
+            for x in 0..self.width() {
+                write!(f, "{}", self.get(Pos { x: x as i64, y: y as i64 }))?;
+            }
+            write!(f, "\n")?;
+        }
+        Ok(())
+    }
+}
+
+impl Image {
+    fn new(image: &Vec<Vec<char>>) -> Self {
+        Image {
+            image: image.clone(),
+            orientation: Orientation::R0,
+            height: image.len(),
+            width: image[0].len()
+        }
+    }
+
+    fn from_str(image: &str) -> Self {
+        Image::new(&image.lines().map(|row| row.chars().collect()).collect())
+    }
+
+    fn width(&self) -> usize {
+        match self.orientation {
+            Orientation::R0 | Orientation::R180 | Orientation::R0FlipH | Orientation::R0FlipV => self.width,
+            Orientation::R90 | Orientation::R270 | Orientation::R90FlipH | Orientation::R90FlipV => self.height
+        }
+    }
+
+    fn height(&self) -> usize {
+        match self.orientation {
+            Orientation::R0 | Orientation::R180 | Orientation::R0FlipH | Orientation::R0FlipV => self.height,
+            Orientation::R90 | Orientation::R270 | Orientation::R90FlipH | Orientation::R90FlipV => self.width
+        }
+    }
+
+    fn transform(&self, pos: Pos) -> (usize, usize) {
+        let x = pos.x as usize;
+        let y = pos.y as usize;
+        let rx = self.width() - 1 - x;
+        let ry = self.height() - 1 - y;
+
+        match self.orientation {
+            Orientation::R0 => (x, y),
+            Orientation::R90 => (ry, x),
+            Orientation::R180 => (rx, ry),
+            Orientation::R270 => (y, rx),
+            Orientation::R0FlipH => (rx, y),
+            Orientation::R0FlipV => (x, ry),
+            Orientation::R90FlipH => (ry, rx),
+            Orientation::R90FlipV => (y, x)
+        }
+    }
+
+    fn get(&self, pos: Pos) -> &char {
+        let (x, y) = self.transform(pos);
+        &self.image[y][x]
+    }
+
+    fn get_mut(&mut self, pos: Pos) -> &mut char {
+        let (x, y) = self.transform(pos);
+        &mut self.image[y][x]
+    }
+
+    fn iter(&self) -> impl Iterator<Item = Pos> + '_ {
+        (0..self.height()).flat_map(move |y|
+            (0..self.width()).map(move |x|
+                Pos { x: x as i64, y: y as i64 }
+            )
+        )
+    }
+
+    fn has_monster_at(&self, origin: &Pos, monster: &Image) -> bool {
+        monster.iter().all(|pos| 
+            monster.get(pos) == &' ' || self.get(pos + origin) == &'#'
+        )
+    }
+
+    fn overwrite_monster(&mut self, origin: &Pos, monster: &Image) {
+        for pos in monster.iter() {
+            if monster.get(pos) == &'#' {
+                *self.get_mut(pos + origin) = 'O';
+            }
+        }
+    }
+
+    fn find_monsters(&mut self, monster: &Image) -> usize {
+        let mut count = 0;
+        for y in 0..(self.height() - monster.height()) {
+            for x in 0..(self.width() - monster.width()) {
+                let p = Pos { x: x as i64, y: y as i64 };
+                if self.has_monster_at(&p, monster) {
+                    self.overwrite_monster(&p, monster);
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+}
+
+fn find_monsters(image: &mut Image) -> usize {
+    let monster = Image::from_str("                  # \n#    ##    ##    ###\n #  #  #  #  #  #   ");
+
+    Orientation::iter().filter_map(|orientation| {
+        image.orientation = orientation;
+        let count = image.find_monsters(&monster);
+        if count > 0 {
+            Some(count)
+        } else {
+            None
+        }
+    }).next();
+
+    image.iter().filter(|pos| image.get(*pos) == &'#').count()
 }
 
 // -- parser
@@ -525,9 +659,8 @@ fn part1(tiles: &Vec<&Tile>) -> Option<usize> {
 }
 
 fn part2(tiles: &Vec<&Tile>) -> usize {
-    let image = arrange_tiles(12, 12, tiles).unwrap().image();
-    println!("{:?}", image);
-    0
+    let mut image = arrange_tiles(12, 12, tiles).unwrap().image();
+    find_monsters(&mut image)
 }
 
 fn main() {
@@ -633,6 +766,7 @@ mod tests {
         let arrangement = arrange_tiles(3, 3, &tiles_by_ref);
         assert!(arrangement.is_some());
         let arrangement = arrangement.unwrap();
+        println!("{:?}", arrangement);
         let corners = vec![
             arrangement.tile_id_at(&Pos { x: 0, y: 0 }),
             arrangement.tile_id_at(&Pos { x: 2, y: 0 }),
@@ -643,5 +777,14 @@ mod tests {
         assert!(corners.contains(&Some(3079)));
         assert!(corners.contains(&Some(2971)));
         assert!(corners.contains(&Some(1171)));
+    }
+
+    #[test]
+    fn test_find_monsters() {
+        let tiles = example_tiles();
+        let tiles_by_ref: Vec<&Tile> = tiles.iter().collect();
+        let mut image = arrange_tiles(3, 3, &tiles_by_ref).unwrap().image();
+
+        assert_eq!(find_monsters(&mut image), 273);
     }
 }
