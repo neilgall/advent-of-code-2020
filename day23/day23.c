@@ -13,24 +13,24 @@ struct cup {
 
 struct cups {
 	struct cup *current;
-	struct cup **by_id;
+	struct cup *by_id;
 	size_t length;
 };
 
 void print_cups(const struct cups *cups) {
-	const struct cup *cup = cups->by_id[1];
+	const struct cup *cup = &cups->by_id[1];
 	do {
 		if (cup == cups->current)
 			printf("(%lu) ", cup->id);
 		else 
 			printf("%lu ", cup->id);
 		cup = cup->next;
-	} while (cup != cups->by_id[1]);
+	} while (cup != &cups->by_id[1]);
 	printf("\n");
 }
 
 const struct cup *first_after_1(const struct cups *cups) {
-	return cups->by_id[1]->next;
+	return cups->by_id[1].next;
 }
 
 cup_id prev(cup_id id, size_t length) {
@@ -47,7 +47,7 @@ void apply_move(struct cups *cups) {
 	cup_id dest_id = prev(cups->current->id, cups->length);
 	struct cup *dest;
 	do {
-		dest = cups->by_id[dest_id];
+		dest = &cups->by_id[dest_id];
 		dest_id = prev(dest_id, cups->length);
 	}
 	while (dest == next1 || dest == next2 || dest == next3);
@@ -72,40 +72,34 @@ void apply_n_moves(struct cups *cups, size_t count) {
 	}
 }
 
-struct cup *new_cup(cup_id id) {
-	struct cup* cup = (struct cup *)malloc(sizeof(struct cup));
-	cup->id = id;
-	cup->next = NULL;
-	return cup;
-}
-
 struct cups *make_cups(const char *init, size_t length, cup_id current) {
 	struct cups *cups = (struct cups *)malloc(sizeof(struct cups));
 	cups->current = NULL;
 	cups->length = length;
-	cups->by_id = (struct cup **)malloc(sizeof(struct cup *) * (length + 1));
+	cups->by_id = (struct cup *)calloc(length + 1, sizeof(struct cup));
 
 	struct cup *first = NULL;
 	struct cup **next_p = &first;
-	size_t count = 1;
+	size_t count = 0;
 	
 	while (*init) {
-		struct cup *cup = new_cup((*init++) - '0');
+		cup_id id = (*init++) - '0';
+		struct cup *cup = &cups->by_id[id];
+		cup->id = id;
 		*next_p = cup;
 		next_p = &cup->next;
-		cups->by_id[cup->id] = cup;
 		count++;
 	}
 
-	while (count <= length) {
-		struct cup *cup = new_cup(count++);
+	while (++count <= length) {
+		struct cup *cup = &cups->by_id[count];
+		cup->id = count;
 		*next_p = cup;
 		next_p = &cup->next;
-		cups->by_id[cup->id] = cup;
 	}
 
 	*next_p = first;
-	cups->current = cups->by_id[current];
+	cups->current = &cups->by_id[current];
 
 	return cups;
 }
