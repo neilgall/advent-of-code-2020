@@ -104,6 +104,11 @@ struct cups *make_cups(const char *init, size_t length, cup_id current) {
 	return cups;
 }
 
+void free_cups(struct cups *cups) {
+	free(cups->by_id);
+	free(cups);
+}
+
 void assert_cups(const char *tag, const struct cups *cups, const char *expect) {
 	for (const struct cup *cup = first_after_1(cups); *expect; cup = cup->next, expect++) {
 		cup_id expected_cup = *expect - '0';
@@ -117,6 +122,7 @@ void test_10_moves() {
 	struct cups *cups = make_cups("389125467", 9, 3);
 	apply_n_moves(cups, 10);
 	assert_cups("test 10 moves", cups, "92658374");
+	free_cups(cups);
 }
 
 
@@ -124,6 +130,7 @@ void test_100_moves() {
 	struct cups *cups = make_cups("389125467", 9, 3);
 	apply_n_moves(cups, 100);
 	assert_cups("test 100 moves", cups, "67384529");
+	free_cups(cups);
 }
 
 void test_10_million_moves() {
@@ -134,6 +141,7 @@ void test_10_million_moves() {
 	if (prod != 149245887792) {
 		printf("test 10 million moves: expected 149245887792 got %lu * %lu = %lu\n", cup->id, cup->next->id, prod);
 	}
+	free_cups(cups);
 }
 
 void run_tests() {
@@ -154,5 +162,6 @@ int main(int argc, char **argv) {
 		apply_n_moves(cups, 10000000);
 		const struct cup *cup = first_after_1(cups);
 		printf("part 2: %lu\n", cup->id * cup->next->id);
+		free_cups(cups);
 	}
 }
