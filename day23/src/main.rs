@@ -1,138 +1,126 @@
-use std::io::Write;
-use std::iter::once;
-use std::time::{Duration, SystemTime};
+use std::ptr;
 
 // -- model
 
-type Cup = u32;
+type CupID = usize;
+
+#[derive(Debug)]
+struct Cup {
+    id: CupID,
+    next: *mut Cup
+}
 
 #[derive(Debug)]
 struct Cups {
     length: usize,
-    offset: usize,
-    cups: Vec<Cup>
+    cups: Vec<Cup>,
+    current: *mut Cup
 }
 
-#[derive(Debug)]
-struct Move {
-    removed: Vec<Cup>,
-    destination: Cup
-}
-
-fn prev(cup: Cup) -> Cup {
-    if cup == 1 { 9 } else { cup - 1 }
-}
-
-fn str_as_cups(s: &str) -> impl Iterator<Item = Cup> + '_ {
-    s.chars().map(|c| (c as Cup) - 48)
-}
-
-fn estimate_remaining(done: usize, total: usize, start: &SystemTime) -> Duration {
-    if done == 0 {
-        Duration::from_secs(0)
-    } else {
-        start.elapsed().unwrap() * (total as u32) / (done as u32)
-    }
+fn str_as_cup_ids(s: &str) -> impl Iterator<Item = CupID> + '_ {
+    s.chars().map(|c| (c as CupID) - 48)
 }
 
 impl Cups {
-    fn new<I>(input: I, current_cup: Cup) -> Self where I: Iterator<Item = Cup> {
-        let cups: Vec<Cup> = input.collect();
-        let offset = cups.iter().position(|c| *c == current_cup).unwrap();
-        let length = cups.len();
+    fn new<I>(input: I, current_cup: CupID) -> Self where I: Iterator<Item = CupID> {
+        let ids: Vec<CupID> = input.collect();
+        let mut cups: Vec<Cup> = (1..=ids.len()).map(|id| Cup { id, next: ptr::null_mut() }).collect();
+
+        for i in 0..cups.len()-1 {
+            cups[ids[i]-1].next = &mut cups[ids[i+1]-1] as *mut Cup;
+        }
+
+        unsafe {
+            let len = cups.len();
+            let mut last = &mut cups[ids[len-1]-1] as *mut Cup;
+            (*last).next = &mut cups[ids[0]-1] as *mut Cup;
+        }
+
+        let current = &mut cups[current_cup-1] as *mut Cup;
+
         Cups {
+            length: cups.len(),
             cups,
-            length,
-            offset
+            current
         }
     }
 
-    fn from_str(input: &str, current_cup: Cup) -> Self {
-        Cups::new(str_as_cups(input), current_cup)
+    fn prev_id(&self, cup: CupID) -> CupID {
+        if cup == 1 { self.length as CupID } else { cup - 1 }
     }
 
-    fn current_cup(&self) -> Cup {
-        self.cups[self.offset]
+    fn from_str(input: &str, current_cup: CupID) -> Self {
+        Cups::new(str_as_cup_ids(input), current_cup)
     }
 
-    fn index_of_cup(&self, cup: Cup) -> usize {
-        self.cups.iter().position(|c| *c == cup).unwrap()
-    }
-
-    fn iter(&self) -> impl Iterator<Item = Cup> + '_ {
-        self.cups.iter().cycle().skip(self.offset).copied()
-    }
-
-    fn labels(&self) -> Vec<Cup> {
-        let start = (self.index_of_cup(1) + 1) % self.length;
-        self.cups.iter().cycle().skip(start).take(self.length-1).copied().collect()
+    fn labels(&self) -> Vec<CupID> {
+        let mut labels = vec![];
+        unsafe {
+            let mut cup = self.cups[0].next as *const Cup;
+            for _ in 1..self.length {
+                labels.push((*cup).id);
+                cup = (*cup).next as *const Cup;
+            }
+        }
+        labels
     }
 
     fn labels_as_str(&self) -> String {
         self.labels().iter().map(|n| n.to_string()).collect::<Vec<String>>().join("")
     }
 
-    fn create_move(&self) -> Move {
-        let removed: Vec<Cup> = self.iter().skip(1).take(3).collect();
-        let mut destination = prev(self.current_cup());
-        while removed.contains(&destination) {
-            destination = prev(destination);
+    fn apply_move(&mut self) {
+        unsafe {
+            let curr = self.current;
+            let next1 = (*curr).next;
+            let next2 = (*next1).next;
+            let next3 = (*next2).next;
+            let next4 = (*next3).next;
+
+            let mut dest_id = self.prev_id((*curr).id);
+            let mut dest;
+            loop {
+                dest = &mut self.cups[dest_id - 1];
+                if ptr::eq(dest, next1) || ptr::eq(dest, next2) || ptr::eq(dest, next3) {
+                    dest_id = self.prev_id(dest_id);
+                } else {
+                    break;
+                }
+            }
+
+            let dest_next1 = (*dest).next;
+
+            // remove next1..next3 from ring
+            (*curr).next = next4;
+
+            // reinsert after dest
+            (*dest).next = next1;
+            (*next3).next = dest_next1;
+
+            self.current = (*self.current).next;
         }
-        Move {
-            removed,
-            destination
-        }
-    }
-
-    fn apply(&mut self, m: Move) {
-        let dest_index = self.index_of_cup(m.destination);
-
-        let remaining_cups = self.cups.iter()
-            .cycle()
-            .skip(dest_index+1)
-            .filter(|c| !m.removed.contains(c))
-            .take(self.length - 4);
-
-        let new_cups: Vec<Cup> = once(&m.destination)
-            .chain(m.removed.iter())
-            .chain(remaining_cups)
-            .copied()
-            .collect();
-
-        self.cups = new_cups;
-
-        let diff = (dest_index + self.length - self.offset) % self.length;
-        let new_offset = if diff <= 4 { 0 } else { self.length - diff + 4 };
-
-        // println!("offset={} dest={} diff={} cups={:?} new_offset={}", self.offset, dest_index, diff, self.cups, new_offset);
-        self.offset = new_offset;
-    }
+   }
 
     fn apply_n_moves(&mut self, count: usize) {
-        let start = SystemTime::now();
-        for n in 0..count {
-            self.apply(self.create_move());
-            if n % 1000 == 0 {
-                print!("{}... {:?} remaining\r", n, estimate_remaining(n, count, &start));
-                std::io::stdout().flush().unwrap();
-            }
+        for _ in 0..count {
+            self.apply_move();
         }
     }
 }
 
 // -- problems
 
-fn part1(input: &str, start_cup: Cup) -> String {
+fn part1(input: &str, start_cup: CupID) -> String {
     let mut cups = Cups::from_str(input, start_cup);
     cups.apply_n_moves(100);
     cups.labels_as_str()
 }
 
-fn part2(input: &str, start_cup: Cup) -> Cup {
-    let mut cups = Cups::new(str_as_cups(input).chain(10..=1_000_000), start_cup);
+fn part2(input: &str, start_cup: CupID) -> CupID {
+    let mut cups = Cups::new(str_as_cup_ids(input).chain(10..=1_000_000), start_cup);
     cups.apply_n_moves(10_000_000);
 
-    let first_2: Vec<Cup> = cups.labels().iter().take(2).copied().collect();
+    let first_2: Vec<CupID> = cups.labels().iter().take(2).copied().collect();
     first_2[0] * first_2[1]
 }
 
@@ -145,80 +133,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_iter_current_3() {
-        let cups = Cups::from_str("389125467", 3);
-        let x: Vec<Cup> = cups.iter().take(15).collect();
-        assert_eq!(x, vec![3, 8, 9, 1, 2, 5, 4, 6, 7, 3, 8, 9, 1, 2, 5]);
-    }
-
-    #[test]
-    fn test_iter_current_2() {
-        let cups = Cups::from_str("389125467", 2);
-        let x: Vec<Cup> = cups.iter().take(15).collect();
-        assert_eq!(x, vec![2, 5, 4, 6, 7, 3, 8, 9, 1, 2, 5, 4 ,6, 7, 3]);
-    }
-
-    #[test]
-    fn test_create_move_1() {
-        let cups = Cups::from_str("389125467", 3);
-        let mv = cups.create_move();
-        assert_eq!(mv.removed, vec![8, 9, 1]);
-        assert_eq!(mv.destination, 2);
-    }
-
-    #[test]
-    fn test_create_move_3() {
-        let cups = Cups::from_str("325467891", 5);
-        let mv = cups.create_move();
-        assert_eq!(mv.removed, vec![4, 6, 7]);
-        assert_eq!(mv.destination, 3);
-    }
-
-    #[test]
-    fn test_apply_move_1() {
-        let mut cups = Cups::from_str("389125467", 3);
-        cups.apply(cups.create_move());
-        assert_eq!(cups.labels(), vec![5, 4, 6, 7, 3, 2, 8, 9]);
-        assert_eq!(cups.current_cup(), 2);
-    }
-
-    #[test]
-    fn test_apply_move_2() {
-        let mut cups = Cups::from_str("328915467", 2);
-        println!("move {:?}", cups.create_move());
-        cups.apply(cups.create_move());
-        assert_eq!(cups.labels(), vec![3, 2, 5, 4, 6, 7, 8, 9]);
-        assert_eq!(cups.current_cup(), 5);
-    }
-
-    #[test]
-    fn test_apply_move_4() {
-        let mut cups = Cups::from_str("725891346", 8);
-        cups.apply(cups.create_move());
-        assert_eq!(cups.labels(), vec![3, 2, 5, 8, 4, 6,7, 9]);
-        assert_eq!(cups.current_cup(), 4);
-    }
-
-    #[test]
-    fn test_apply_move_5() {
-        let mut cups = Cups::from_str("325846791", 4);
-        cups.apply(cups.create_move());
-        assert_eq!(cups.labels(), vec![3, 6, 7, 9, 2, 5, 8, 4]);
-        assert_eq!(cups.current_cup(), 1);
-    }
-
-    #[test]
-    fn test_apply_move_9() {
-        let mut cups = Cups::from_str("741583926", 6);
-        let mv = cups.create_move();
-        assert_eq!(mv.removed, vec![7, 4, 1]);
-        assert_eq!(mv.destination, 5);
-        cups.apply(mv);
-        assert_eq!(cups.labels(), vec![8, 3, 9, 2, 6, 5, 7, 4]);
-        assert_eq!(cups.current_cup(), 5);
-    }
 
     #[test]
     fn test_10_moves() {
